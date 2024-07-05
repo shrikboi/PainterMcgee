@@ -13,7 +13,7 @@ class Painting:
         self.rectangle_list = rectangle_list
         self.size = size
         if current_painting is None:
-            self.current_painting = np.ones((*size, 3), dtype=np.uint8) * 255
+            self.current_painting = np.ones((*size[::-1], 3), dtype=np.uint8) * 255
         else:
             self.current_painting = current_painting.copy()
 
@@ -39,8 +39,8 @@ class Painting:
         # Generate all legal moves
         legal_moves = []
         for rectangle in self.rectangle_list:
-            for i in range(0, self.size[1], 10):
-                for j in range(0, self.size[0], 10):
+            for i in range(0, self.size[0], 10):
+                for j in range(0, self.size[1], 10):
                     legal_moves.append(Move(rectangle, (i, j), self.original_image))
         return legal_moves
 
