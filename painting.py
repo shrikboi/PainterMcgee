@@ -1,33 +1,26 @@
 import numpy as np
 from utils import draw_rectangle
 import cv2
-PICTURE_SIZE = (128,128) #(height, width)
 
 
 class Painting:
-
     """
 
     """
 
-    def __init__(self, original_image, rectangle_list, current_painting=None):
+    def __init__(self, original_image, rectangle_list, size, current_painting=None):
         self.original_image = original_image
         self.rectangle_list = rectangle_list
+        self.size = size
         if current_painting is None:
-            self.current_painting = np.ones((*(PICTURE_SIZE), 3), dtype=np.uint8) * 255
+            self.current_painting = np.ones((*size, 3), dtype=np.uint8) * 255
         else:
-            self.current_painting = current_painting
+            self.current_painting = current_painting.copy()
 
     def add_move(self, move):
         """
-        Try to add <player>'s <move>.
-
-        If the move is legal, the board state is updated; if it's not legal, a
-        ValueError is raised.
-
-        Returns the number of tiles placed on the board.
+        Try to add move
         """
-
         self.current_painting = draw_rectangle(self.current_painting, move.center, move.rectangle, move.color)
         return 1
 
@@ -46,9 +39,9 @@ class Painting:
         # Generate all legal moves
         legal_moves = []
         for rectangle in self.rectangle_list:
-            for i in range(0, PICTURE_SIZE[0], 10):
-                for j in range(0, PICTURE_SIZE[1], 10):
-                    legal_moves.append(Move(rectangle,(i,j),self.original_image))
+            for i in range(0, self.size[1], 10):
+                for j in range(0, self.size[0], 10):
+                    legal_moves.append(Move(rectangle, (i, j), self.original_image))
         return legal_moves
 
     def score(self):
@@ -60,9 +53,8 @@ class Painting:
     def __eq__(self, other):
         return np.array_equal(self.current_painting, other.current_painting)
 
-
     def __copy__(self):
-        cpy_painting = Painting(self.original_image, self.rectangle_list, self.current_painting)
+        cpy_painting = Painting(self.original_image, self.rectangle_list, self.size, self.current_painting)
         cpy_painting.rectangle_list = np.copy(self.rectangle_list)
         cpy_painting.original_image = np.copy(self.original_image)
         cpy_painting.current_painting = np.copy(self.current_painting)
@@ -81,30 +73,20 @@ class Move:
         self.rectangle = rectangle
         self.center = center
         self.original_picture = original_picture
-        self.color = self.decide_color() #TODO fucntion to decide color
-
-    def decide_color(self):
-        return self.calculate_average_color()
+        self.color = self.calculate_average_color()
 
     def extract_roi(self):
         """
         Extract the region of interest (ROI) defined by a rotated rectangle from the image.
-
-        :param image: The input image.
-        :param center: The center of the rectangle (x, y).
-        :param size: The size of the rectangle (width, height).
-        :param angle: The rotation angle of the rectangle in degrees.
         :return: The extracted ROI.
         """
 
-        rect = (self.center[::-1], self.rectangle.size[::-1], self.rectangle.angle)
-
+        rect = (self.center, self.rectangle.size, self.rectangle.angle)
         # Get the rotation matrix
         M = cv2.getRotationMatrix2D(self.center, self.rectangle.angle, 1.0)
 
         # Rotate the entire image
-        rotated_image = cv2.warpAffine(self.original_picture, M,
-                                       (self.original_picture.shape[1], self.original_picture.shape[0]))
+        rotated_image = cv2.warpAffine(self.original_picture, M, (self.original_picture.shape[:2])[::1])
 
         # Calculate the bounding box of the rotated rectangle
         box = cv2.boxPoints(rect)
@@ -121,11 +103,6 @@ class Move:
     def calculate_average_color(self):
         """
         Calculate the average color of the region defined by a rotated rectangle in the image.
-
-        :param image: The input image.
-        :param center: The center of the rectangle (x, y).
-        :param size: The size of the rectangle (width, height).
-        :param angle: The rotation angle of the rectangle in degrees.
         :return: The average color (BGR).
         """
         # Extract the ROI
@@ -134,4 +111,3 @@ class Move:
         avg_color = cv2.mean(roi)[:3]  # Exclude the alpha channel if present
 
         return avg_color
-

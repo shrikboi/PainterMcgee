@@ -1,5 +1,5 @@
-import random
 import numpy as np
+
 
 def not_a_real_search(paint):
     curr_state = paint.get_start_state()

@@ -2,7 +2,7 @@ import os
 import re
 
 """
-Classes and utilities to describe all of the game recktangles.
+Classes and utilities to describe all of the game rectangles.
 """
 
 
@@ -44,15 +44,15 @@ class RectangleList(object):
                     print(f"Every line in {fname} needs to be: width height angle edge_thickness")
                     continue
                 try:
-                    height = int(line[0])
                     width = int(line[1])
+                    height = int(line[0])
                     angle = int(line[2])
                     edge_thickness = int(line[3])
                 except:
                     print(f"Every line in {fname} needs to be: width height angle edge_thickness")
                     continue
                 # TODO more checks to see if file is okay (deg between 0 and 360 etc)
-                self.rectangles.append(Rectangle((height,width),angle,edge_thickness))
+                self.rectangles.append(Rectangle((width, height), angle, edge_thickness))
 
             self.num_rectangles = len(self.rectangles)
 
@@ -66,5 +66,3 @@ class RectangleList(object):
 
     def __iter__(self):
         return self.rectangles.__iter__()
-
-

@@ -1,9 +1,10 @@
 from painting import Painting
 
-class Paint():
-    def __init__(self, original_image, rectangle_list):
+
+class Paint:
+    def __init__(self, original_image, rectangle_list, size):
         self.expanded = 0
-        self.painting = Painting(original_image, rectangle_list)
+        self.painting = Painting(original_image, rectangle_list, size)
 
     def get_start_state(self):
         """
@@ -28,7 +29,7 @@ class Paint():
         """
         actions: A list of actions to take
 
-        This method returns the total cost of a particular sequence of actions.  The sequence must
+        This method returns the total cost of a particular sequence of actions. The sequence must
         be composed of legal moves
         """
         return len(actions)
