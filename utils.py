@@ -63,3 +63,15 @@ def display_images_side_by_side(image1, image2):
     cv2.imshow('Images Side by Side', combined_image)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
+
+
+def draw_all_rectangles(rectangle_list, size):
+    """
+    Draw all possible rectangles one by one to help us see if the rectangles are good :)
+    """
+    for i, rectangle in enumerate(rectangle_list):
+        image = np.ones((*size, 3), dtype=np.uint8) * 255
+        image = draw_rectangle(image, (size[0]/2, size[1]/2), rectangle)
+        cv2.imshow(f'rectangle {i}', image)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
