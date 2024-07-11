@@ -3,7 +3,7 @@ import numpy as np
 
 def not_a_real_search(paint):
     curr_state = paint.get_start_state()
-    for i in range(200):
+    for i in range(1600):
         print(f"iteration {i}")
         best_action = None
         best_score = np.inf

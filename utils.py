@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
+import random
 
 
-def draw_rectangle(image, center, rectangle, color=(0, 0, 0)):
+def draw_rectangle(image, center, rectangle, color=(300, 41, 62)):
     """
     Draw a rectangle on an image with the given parameters.
 
@@ -18,7 +19,9 @@ def draw_rectangle(image, center, rectangle, color=(0, 0, 0)):
     box = np.int32(box)
 
     cv2.fillPoly(image, [box], color)
-    cv2.drawContours(image, [box], 0, (0, 0, 0), rectangle.edge_thickness)
+    edge_thickness = rectangle.edge_thickness
+    if edge_thickness != 0:
+        cv2.drawContours(image, [box], 0, (0, 0, 0), rectangle.edge_thickness)
 
     return image
 
@@ -75,3 +78,17 @@ def draw_all_rectangles(rectangle_list, size):
         cv2.imshow(f'rectangle {i}', image)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+
+def generate_rectangles(n, with_edges):
+    with open("./layouts/rectangle_list.txt", "w") as file:
+        for _ in range(n):
+            width = random.randint(1, 60)  # Random width between 1 and 100
+            height = random.randint(1, 60)  # Random height between 1 and 100
+            degree = random.randint(0, 360)  # Random degree between 0 and 360
+            if with_edges:
+                edge_thickness = random.randint(1, 4)  # Random edge_thickness between 1 and 10
+            else:
+                edge_thickness = 0  # Edge thickness is zero if edge is False
+
+            file.write(f"{width} {height} {degree} {edge_thickness}\n")

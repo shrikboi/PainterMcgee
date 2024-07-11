@@ -39,8 +39,8 @@ class Painting:
         # Generate all legal moves
         legal_moves = []
         for rectangle in self.rectangle_list:
-            for i in range(0, self.size[0], 10):
-                for j in range(0, self.size[1], 10):
+            for i in range(0, self.size[0], 1):
+                for j in range(0, self.size[1], 1):
                     legal_moves.append(Move(rectangle, (i, j), self.original_image))
         return legal_moves
 
@@ -48,7 +48,7 @@ class Painting:
         squared_diff = (self.original_image - self.current_painting) ** 2
         # Calculate the mean of the squared differences
         mean_squared_diff = np.mean(squared_diff)
-        return mean_squared_diff
+        return np.sqrt(mean_squared_diff)
 
     def __eq__(self, other):
         return np.array_equal(self.current_painting, other.current_painting)

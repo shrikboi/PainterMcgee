@@ -1,10 +1,10 @@
-from utils import draw_all_rectangles, display_images_side_by_side
+from utils import draw_all_rectangles, display_images_side_by_side, generate_rectangles
 from rectangle import RectangleList
 from search import not_a_real_search
 from paint import Paint
 import cv2
 
-PICTURE_SIZE = (128, 128) #(width, height)
+PICTURE_SIZE = (40, 40) #(width, height)
 
 
 def main():
@@ -27,5 +27,6 @@ def check_our_rectangle_list():
     draw_all_rectangles(rectangle_list, PICTURE_SIZE)
 
 
-# main()
-check_our_rectangle_list()
+main()
+# generate_rectangles(60, False)
+# check_our_rectangle_list()
