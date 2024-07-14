@@ -4,7 +4,7 @@ from search import not_a_real_search
 from paint import Paint
 import cv2
 
-PICTURE_SIZE = (40, 40) #(width, height)
+PICTURE_SIZE = (128, 128) #(width, height)
 
 
 def main():
@@ -27,6 +27,6 @@ def check_our_rectangle_list():
     draw_all_rectangles(rectangle_list, PICTURE_SIZE)
 
 
+generate_rectangles(60, 20, 20, False)
 main()
-# generate_rectangles(60, False)
 # check_our_rectangle_list()

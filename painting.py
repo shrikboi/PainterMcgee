@@ -48,15 +48,16 @@ class Painting:
         squared_diff = (self.original_image - self.current_painting) ** 2
         # Calculate the mean of the squared differences
         mean_squared_diff = np.mean(squared_diff)
-        return np.sqrt(mean_squared_diff)
+        return mean_squared_diff
 
     def __eq__(self, other):
         return np.array_equal(self.current_painting, other.current_painting)
 
     def __copy__(self):
         cpy_painting = Painting(self.original_image, self.rectangle_list, self.size, self.current_painting)
-        cpy_painting.rectangle_list = np.copy(self.rectangle_list)
         cpy_painting.original_image = np.copy(self.original_image)
+        cpy_painting.rectangle_list = np.copy(self.rectangle_list)
+        cpy_painting.size = np.copy(self.size)
         cpy_painting.current_painting = np.copy(self.current_painting)
         return cpy_painting
 
@@ -75,39 +76,54 @@ class Move:
         self.original_picture = original_picture
         self.color = self.calculate_average_color()
 
-    def extract_roi(self):
-        """
-        Extract the region of interest (ROI) defined by a rotated rectangle from the image.
-        :return: The extracted ROI.
-        """
-
+    def calculate_average_color(self):
         rect = (self.center, self.rectangle.size, self.rectangle.angle)
-        # Get the rotation matrix
-        M = cv2.getRotationMatrix2D(self.center, self.rectangle.angle, 1.0)
 
-        # Rotate the entire image
-        rotated_image = cv2.warpAffine(self.original_picture, M, (self.original_picture.shape[:2])[::1])
-
-        # Calculate the bounding box of the rotated rectangle
+        # Calculate the bounding box of the rotated rectangle in original coordinates
         box = cv2.boxPoints(rect)
         box = np.int32(box)
 
         # Get the coordinates of the bounding box
         x, y, w, h = cv2.boundingRect(box)
 
-        # Extract the ROI from the rotated image
-        roi = rotated_image[y:y + h, x:x + w]
+        # Ensure the bounding box is within the image boundaries
+        x = max(x, 0)
+        y = max(y, 0)
+        w = min(w, self.original_picture.shape[1] - x)
+        h = min(h, self.original_picture.shape[0] - y)
 
-        return roi
+        # Extract the bounding box region from the original image
+        bounding_box_roi = self.original_picture[y:y + h, x:x + w]
 
-    def calculate_average_color(self):
-        """
-        Calculate the average color of the region defined by a rotated rectangle in the image.
-        :return: The average color (BGR).
-        """
-        # Extract the ROI
-        roi = self.extract_roi()
+        # Calculate the center of the bounding box region
+        bounding_box_center = (bounding_box_roi.shape[1] // 2, bounding_box_roi.shape[0] // 2)
+
+        # Get the rotation matrix for the bounding box region
+        M = cv2.getRotationMatrix2D(bounding_box_center, self.rectangle.angle, 1.0)
+
+        # Rotate the bounding box region
+        rotated_roi = cv2.warpAffine(bounding_box_roi, M,
+                                     (bounding_box_roi.shape[1], bounding_box_roi.shape[0]))
+
+        # Calculate the new center of the rotated ROI
+        new_center = (rotated_roi.shape[1] // 2, rotated_roi.shape[0] // 2)
+
+        # Calculate the bounding box of the rotated rectangle in the rotated ROI coordinates
+        rect = (new_center, self.rectangle.size, 0)  # Angle is 0 because we already rotated the region
+        box = cv2.boxPoints(rect)
+        box = np.int32(box)
+        x, y, w, h = cv2.boundingRect(box)
+
+        # Ensure the ROI is within the rotated region boundaries
+        x = max(x, 0)
+        y = max(y, 0)
+        w = min(w, rotated_roi.shape[1] - x)
+        h = min(h, rotated_roi.shape[0] - y)
+
+        # Extract the final ROI from the rotated bounding box region
+        final_roi = rotated_roi[y:y + h, x:x + w]
+
         # Calculate the average color
-        avg_color = cv2.mean(roi)[:3]  # Exclude the alpha channel if present
-
+        avg_color = cv2.mean(final_roi)[:3]  # Exclude the alpha channel if present
         return avg_color
+

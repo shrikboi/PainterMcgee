@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 import random
 
+PRESENTING_SIZE = (512, 512)
+
 
 def draw_rectangle(image, center, rectangle, color=(300, 41, 62)):
     """
@@ -33,6 +35,8 @@ def display_images_side_by_side(image1, image2):
     :param image1: First (left) image.
     :param image2: Second (right) image.
     """
+    image1 = cv2.resize(image1, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
+    image2 = cv2.resize(image2, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
 
     _, width1 = image1.shape[:2]
     _, width2 = image2.shape[:2]
@@ -63,9 +67,7 @@ def display_images_side_by_side(image1, image2):
     combined_image = np.hstack((image1_with_text, image2_with_text))
 
     # Display the combined image
-    cv2.imshow('Images Side by Side', combined_image)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    return combined_image
 
 
 def draw_all_rectangles(rectangle_list, size):
@@ -80,11 +82,11 @@ def draw_all_rectangles(rectangle_list, size):
         cv2.destroyAllWindows()
 
 
-def generate_rectangles(n, with_edges):
+def generate_rectangles(n, max_width, max_height, with_edges):
     with open("./layouts/rectangle_list.txt", "w") as file:
         for _ in range(n):
-            width = random.randint(1, 60)  # Random width between 1 and 100
-            height = random.randint(1, 60)  # Random height between 1 and 100
+            width = random.randint(1, max_width)  # Random width between 1 and 100
+            height = random.randint(1, max_height)  # Random height between 1 and 100
             degree = random.randint(0, 360)  # Random degree between 0 and 360
             if with_edges:
                 edge_thickness = random.randint(1, 4)  # Random edge_thickness between 1 and 10

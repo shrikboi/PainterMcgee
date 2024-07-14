@@ -3,7 +3,8 @@ import numpy as np
 
 def not_a_real_search(paint):
     curr_state = paint.get_start_state()
-    for i in range(1600):
+    moves = []
+    for i in range(1200):
         print(f"iteration {i}")
         best_action = None
         best_score = np.inf
@@ -12,5 +13,5 @@ def not_a_real_search(paint):
                 best_score = successor.score()
                 best_action = action
         curr_state.add_move(best_action)
-
+        moves.append(best_action)
     return curr_state.current_painting
