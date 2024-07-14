@@ -12,7 +12,7 @@ MAX_WIDTH = 30
 MAX_HEIGHT = 30
 POPULATION_SIZE = 100
 RECTANGLE_AMOUNT = 1000
-ITERATION_LIMIT = 500
+ITERATION_LIMIT = 10
 PICTURE_SIZE = (128, 128)
 MUTANT_LOC = 20
 MUTANT_SCALE = 1
@@ -30,8 +30,8 @@ def generate_random_rectangle(edge_thickness=0):
 
     if edge_thickness:
         edge_thickness = random.randint(1, edge_thickness)  # Random edge_thickness between 1 and 10
-    return (Rectangle((width, height), degree, edge_thickness),
-            (center_width, center_height), (color_r, color_g, color_b))
+    return (Rectangle((width, height), degree, edge_thickness), (center_width, center_height),
+            (color_r, color_g, color_b))
 
 
 def loss_function(subject, og_image):
@@ -130,7 +130,7 @@ def reproduce(mom, dad, og_image):
     mom_genes = np.random.choice(mom.shape[0], size=int(RECTANGLE_AMOUNT / 2), replace=False, p=mom_rectangle_scores)
     dad_genes = np.random.choice(dad.shape[0], size=int(RECTANGLE_AMOUNT / 2), replace=False, p=dad_rectangle_scores)
 
-    child_genes = np.concatenate((mom_genes, dad_genes), axis=0)
+    child_genes = np.concatenate((mom[mom_genes], dad[dad_genes]), axis=0)
 
     # Mutant me up scotty
     mutant_percentage = np.abs(np.random.normal(MUTANT_LOC, MUTANT_SCALE)) / 100
