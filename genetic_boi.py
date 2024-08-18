@@ -1,7 +1,7 @@
 import os
 import random
 from utils import (draw_rectangle, display_images_side_by_side, extract_features, calculate_color,
-                   generate_random_rectangle)
+                   generate_random_rectangle, display_image, create_gif, save_paintings_to_folder)
 import numpy as np
 import cv2
 import time
@@ -13,13 +13,17 @@ import torchvision.transforms as transforms
 
 MAX_REC_WIDTH = 30
 MAX_REC_HEIGHT = 30
+EDGE_THICKNESS = 1
+MULTIPLY_WEIGHTS = 50
 POPULATION_SIZE = 20
-RECTANGLE_AMOUNT = 400
-ITERATION_LIMIT = 1000
+RECTANGLE_AMOUNT = 200
+ITERATION_LIMIT = 5000
 PICTURE_SIZE = (128, 128)
 MUTANT_LOC = 5
 MUTANT_SCALE = 2
 K_TOURNAMENT = POPULATION_SIZE // 5
+directory = f"./images_genetic/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MUTANT_LOC}_" \
+                f"{MUTANT_SCALE}_{MAX_REC_WIDTH}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}"
 
 # if false we choose color, else color randomly chosen
 COLOR_ME_TENDERS = False
@@ -168,7 +172,10 @@ def reproduce(mom, dad, og_image):
                                                     size=int(np.ceil(RECTANGLE_AMOUNT * mutant_percentage)),
                                                     replace=False))
     for mutation in genes_indices_to_be_mutated:
-        child[mutation] = generate_random_rectangle(og_image=og_image)
+        child[mutation] = generate_random_rectangle(og_image=og_image,
+                                                    max_width=MAX_REC_WIDTH,
+                                                    max_height=MAX_REC_HEIGHT,
+                                                    edge_thickness=EDGE_THICKNESS)
 
     return list(child)
 
@@ -207,7 +214,7 @@ def add_gaussian_noise(rgb_tuple, mean=0, stddev=15):
 
 
 def top_indices(arr, percent):
-    # Calculate the number of top elements corresponding to 20%
+    # Calculate the number of top elements corresponding to percent%
     n_top = int(np.ceil(len(arr) * percent))
 
     # Get the indices of the sorted array in descending order
@@ -215,6 +222,9 @@ def top_indices(arr, percent):
 
     # Return the indices of the top 20% elements
     return sorted_indices[:n_top]
+
+
+
 
 
 if __name__ == '__main__':
@@ -226,14 +236,16 @@ if __name__ == '__main__':
     original_image = cv2.imread(original_image_path)
     resized_image = cv2.resize(original_image, PICTURE_SIZE, interpolation=cv2.INTER_AREA)
 
-    weights_matrix = extract_features(resized_image)
+    weights_matrix = extract_features(resized_image, MULTIPLY_WEIGHTS)
 
     # Generate random population
     curr_population = np.empty(shape=(POPULATION_SIZE,), dtype=list)
     for i in range(POPULATION_SIZE):
-        curr_population[i] = [generate_random_rectangle(og_image=resized_image) for _ in
-                              range(RECTANGLE_AMOUNT)]
+        curr_population[i] = [generate_random_rectangle(og_image=resized_image, max_height=MAX_REC_HEIGHT,
+                                                        max_width=MAX_REC_WIDTH, edge_thickness=EDGE_THICKNESS)
+                              for _ in range(RECTANGLE_AMOUNT)]
 
+    best_of_every_round = []
     for i in tqdm(range(ITERATION_LIMIT)):
         start_iter_time = time.time()
 
@@ -242,15 +254,15 @@ if __name__ == '__main__':
 
         fitness_scores = calculate_fitness_scores(past_population, resized_image, weights_matrix)
         if i % 5 == 0:
-            top_5 = top_indices(fitness_scores, 0.25)
+            top_5 = top_indices(fitness_scores, 5/POPULATION_SIZE)
+            best_of_every_round.append(past_population[top_5[0]])
             print("top 5 avg fitness score is ", np.average(fitness_scores[top_5]))
 
-        indices = top_indices(fitness_scores, 0.25)
 
+        indices = top_indices(fitness_scores, 0.25)
         curr_population[:len(indices)] = past_population[indices]
 
         distribution = generate_distribution(fitness_scores)
-
         for j in range(len(indices), POPULATION_SIZE):
             mom_and_dad = np.random.choice(len(distribution), size=2, p=distribution, replace=False)
             mom = past_population[mom_and_dad[0]]
@@ -263,19 +275,10 @@ if __name__ == '__main__':
         # print(f"Time taken: {time.time() - start_iter_time}")
 
     fitness_scores = calculate_fitness_scores(curr_population, resized_image, weights_matrix)
-    top_5 = top_indices(fitness_scores, 0.25)
-    best_subjects = curr_population[top_5]
+    best_of_every_round.append(curr_population[top_indices(fitness_scores, 1 / POPULATION_SIZE)[0]])
+    top_5 = top_indices(fitness_scores, 5/POPULATION_SIZE)
 
-    best_paintings = []
-    # directory = f"./images_genetic/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MUTANT_LOC}_{MUTANT_SCALE}_{MAX_WIDTH}_"
-    directory = f"./images_genetic/TOURN_{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MUTANT_LOC}_{MUTANT_SCALE}_{MAX_REC_WIDTH}_"
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    for i, subject in enumerate(best_subjects):
-        best_paintings.append(np.ones((*PICTURE_SIZE[::-1], 3), dtype=np.uint8) * 255)
-        for rectangle in subject:
-            draw_rectangle(best_paintings[i], rectangle)
+    save_paintings_to_folder(directory+"/top5", curr_population[top_5], resized_image)
+    save_paintings_to_folder(directory+"/gif", best_of_every_round, resized_image)
 
-        cv2.imwrite(
-            os.path.join(directory, f"image_{i}.png"),
-            display_images_side_by_side(resized_image, best_paintings[i]))
+    create_gif(directory+"/gif", directory+"/GIF.gif")

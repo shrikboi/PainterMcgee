@@ -8,8 +8,10 @@ import os
 NUMBER_OF_RECTANGLES = 400
 MAX_REC_WIDTH = 30
 MAX_REC_HEIGHT = 30
+EDGE_THICKNESS = 0
 PICTURE_SIZE = (128, 128)
 ORIGINAL_PICTURE_NAME = "FELV-cat.jpg"
+
 
 class Node:
     def __init__(self, image, target_img, parent=None, rect=None, depth=0):
@@ -27,8 +29,11 @@ class Node:
     def generate_possible_actions(target_img):
         # Generate potential rectangle properties
         actions = []
-        for _ in range(5):  # Limit the number of potential actions for simplicity
-            rectangle = generate_random_rectangle(og_image=target_img)
+        for _ in range(5): # Limit the number of potential actions for simplicity
+            rectangle = generate_random_rectangle(og_image=target_img,
+                                                  max_width=MAX_REC_WIDTH,
+                                                  max_height=MAX_REC_HEIGHT,
+                                                  edge_thickness=EDGE_THICKNESS)
             actions.append(rectangle)
         return actions
 
@@ -99,7 +104,7 @@ target_img = cv2.resize(target_img, (128, 128))
 root_node = Node(np.ones_like(target_img)*255, target_img)
 
 
-best_approximation = mcts(root_node, target_img, max_depth=500, iterations=1000)
+best_approximation = mcts(root_node, target_img, max_depth=200, iterations=1000)
 directory = f"./images_monte/"
 if not os.path.exists(directory):
     os.makedirs(directory)
