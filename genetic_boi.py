@@ -1,5 +1,8 @@
 import os
 import random
+
+from colour import delta_E
+
 from utils import (draw_rectangle, display_images_side_by_side, extract_features, calculate_color,
                    generate_random_rectangle, display_image, create_gif, save_paintings_to_folder)
 import numpy as np
@@ -10,26 +13,47 @@ from tqdm import tqdm
 import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
+import colour
 
-MAX_REC_WIDTH = 30
-MAX_REC_HEIGHT = 30
-EDGE_THICKNESS = 1
+
+MAX_SIZE = 20
+EDGE_THICKNESS = 0
 MULTIPLY_WEIGHTS = 50
 POPULATION_SIZE = 20
-RECTANGLE_AMOUNT = 200
+RECTANGLE_AMOUNT = 350
 ITERATION_LIMIT = 5000
 PICTURE_SIZE = (128, 128)
 MUTANT_LOC = 5
 MUTANT_SCALE = 2
 K_TOURNAMENT = POPULATION_SIZE // 5
-directory = f"./images_genetic/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MUTANT_LOC}_" \
-                f"{MUTANT_SCALE}_{MAX_REC_WIDTH}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}"
+# IMAGE_NAME = 'FELV-cat'
+# IMAGE_NAME = 'chair'
+# IMAGE_NAME = 'image'
+# IMAGE_NAME = 'shrook'
+IMAGE_NAME = 'duck'
+directory = f"./images_genetic/colors/{IMAGE_NAME}/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MUTANT_LOC}_" \
+                f"{MUTANT_SCALE}_{MAX_SIZE}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}"
 
 # if false we choose color, else color randomly chosen
-COLOR_ME_TENDERS = False
+COLOR_ME_TENDERS = True
 
 # Load a pre-trained VGG16 model
 vgg = models.vgg16(weights="VGG16_Weights.DEFAULT").features
+
+
+def delta_e_loss(subject, image2, weights_matrix):
+    l2_start_time = time.time()
+    image1 = np.ones((*PICTURE_SIZE[::-1], 3), dtype=np.uint8) * 255
+    for rectangle in subject:
+        draw_rectangle(image1, rectangle)
+
+    image1 = cv2.cvtColor(image1.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+    image2 = cv2.cvtColor(image2.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+
+    delta_e = colour.difference.delta_e.delta_E_CIE2000(image1, image2)
+    delta_e = delta_e*weights_matrix
+    # print("l2 time is ", time.time() - l2_start_time)
+    return np.mean(delta_e)
 
 
 def no_extract_features(model, x):
@@ -89,7 +113,7 @@ def loss_function(subject, og_image, weights_matrix):
     current_painting = np.ones((*PICTURE_SIZE[::-1], 3), dtype=np.uint8) * 255
     for rectangle in subject:
         draw_rectangle(current_painting, rectangle)
-
+    l2_start_time = time.time()
     squared_diff = np.square(og_image - current_painting)
     weights_stacked = np.stack([weights_matrix, weights_matrix, weights_matrix], axis=-1)
     squared_diff = squared_diff*weights_stacked
@@ -103,7 +127,7 @@ def loss_function(subject, og_image, weights_matrix):
 def calculate_fitness_scores(population, og_image, weights_matrix):
     fitness_scores = np.zeros(len(population))
     for j, subject in enumerate(population):
-        fitness_scores[j] = loss_function(subject, og_image, weights_matrix)
+        fitness_scores[j] = delta_e_loss(subject, og_image, weights_matrix)
     return -fitness_scores
 
 
@@ -129,28 +153,57 @@ def rectangle_scores(rectangles, og_image):
     return probabilities
 
 
+def mutation_1(child, og_image):
+    mutant_percentage = np.abs(np.random.normal(MUTANT_LOC, MUTANT_SCALE)) / 100
+    child = np.array(child, dtype=object)
+    genes_indices_to_be_mutated = np.random.choice(child.shape[0],
+                                                   size=int(np.ceil(RECTANGLE_AMOUNT * mutant_percentage)),
+                                                   replace=False)
+    for i in genes_indices_to_be_mutated:
+        child[i] = generate_random_rectangle(og_image=og_image, max_size=MAX_SIZE,
+                                             edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS)
+    child = list(child)
+    return child
+
+
+def mutation_2(child, og_image):
+    child.append(generate_random_rectangle(og_image=og_image, max_size=MAX_SIZE,
+                                             edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS))
+    return child
+
+
 def reproduce(mom, dad, og_image):
     mom = np.array(mom, dtype=object)
     dad = np.array(dad, dtype=object)
+
+    n = max(mom.size, dad.size)
+    def pad_array(arr, n):
+        padding_length = n - len(arr)
+        if padding_length > 0:
+            return np.pad(arr, (0, padding_length), mode='constant', constant_values=None)
+        return arr
+
+    # Pad the arrays
+    mom_padded = pad_array(mom, n)
+    dad_padded = pad_array(dad, n)
+
 
     child = []
     horizontal_cut = random.randint(0, 2)
     if horizontal_cut:
         horizontal_line = random.randint(0, PICTURE_SIZE[1])
-        for rectangle in mom:
-            if rectangle.center[1] >= horizontal_line:
-                child.append(rectangle)
-        for rectangle in dad:
-            if rectangle.center[1] < horizontal_line:
-                child.append(rectangle)
+        for i in range(n):
+            if mom_padded[i] is not None and mom_padded[i].center[1] >= horizontal_line:
+                child.append(mom_padded[i])
+            if dad_padded[i] is not None and dad_padded[i].center[1] < horizontal_line:
+                child.append(dad_padded[i])
     else:
         vertical_line = random.randint(0, PICTURE_SIZE[0])
-        for rectangle in mom:
-            if rectangle.center[0] >= vertical_line:
-                child.append(rectangle)
-        for rectangle in dad:
-            if rectangle.center[0] < vertical_line:
-                child.append(rectangle)
+        for i in range(n):
+            if mom_padded[i] is not None and mom_padded[i].center[0] >= vertical_line:
+                child.append(mom_padded[i])
+            if dad_padded[i] is not None and dad_padded[i].center[0] < vertical_line:
+                child.append(dad_padded[i])
 
     # best_child = None
     # lowest_loss = np.inf
@@ -165,19 +218,13 @@ def reproduce(mom, dad, og_image):
     #         lowest_loss = curr_loss
 
     # Mutant me up scotty
-    mutant_percentage = np.abs(np.random.normal(MUTANT_LOC, MUTANT_SCALE)) / 100
-
-    child = np.array(child, dtype=object)
-    genes_indices_to_be_mutated = (np.random.choice(child.shape[0],
-                                                    size=int(np.ceil(RECTANGLE_AMOUNT * mutant_percentage)),
-                                                    replace=False))
-    for mutation in genes_indices_to_be_mutated:
-        child[mutation] = generate_random_rectangle(og_image=og_image,
-                                                    max_width=MAX_REC_WIDTH,
-                                                    max_height=MAX_REC_HEIGHT,
-                                                    edge_thickness=EDGE_THICKNESS)
-
-    return list(child)
+    mutant_type = random.randint(1, 6)
+    if mutant_type == 1:
+        return mutation_1(child, og_image)
+    elif mutant_type <= 4:
+        return mutation_2(child, og_image)
+    else:
+        return child
 
 
 def tournament(pop, resized_img):
@@ -193,25 +240,6 @@ def tournament(pop, resized_img):
     return best_subject
 
 
-def add_gaussian_noise(rgb_tuple, mean=0, stddev=15):
-    """
-    Adds Gaussian noise to each component of the RGB tuple.
-
-    :param rgb_tuple: A tuple of 3 floats representing an RGB color.
-    :param mean: Mean of the Gaussian noise.
-    :param stddev: Standard deviation of the Gaussian noise.
-    :return: A tuple of 3 floats with added Gaussian noise, clamped between 0 and 1.
-    """
-    noisy_rgb = []
-    for value in rgb_tuple:
-        noise = np.random.normal(mean, stddev)
-        noisy_value = value + noise
-        # Clamp the value between 0 and 1
-        noisy_value = min(max(noisy_value, 0), 255)
-        noisy_rgb.append(noisy_value)
-
-    return tuple(noisy_rgb)
-
 
 def top_indices(arr, percent):
     # Calculate the number of top elements corresponding to percent%
@@ -224,15 +252,12 @@ def top_indices(arr, percent):
     return sorted_indices[:n_top]
 
 
-
-
-
 if __name__ == '__main__':
     print(f"The parameters are:")
     print(f"Population size {POPULATION_SIZE}, {RECTANGLE_AMOUNT} rectangles,"
           f" {ITERATION_LIMIT} iterations, mutant loc {MUTANT_LOC}, mutant scale {MUTANT_SCALE},"
-          f" max width {MAX_REC_WIDTH}")
-    original_image_path = 'layouts/FELV-cat.jpg'
+          f" max width {MAX_SIZE}")
+    original_image_path = f'layouts/{IMAGE_NAME}.jpg'
     original_image = cv2.imread(original_image_path)
     resized_image = cv2.resize(original_image, PICTURE_SIZE, interpolation=cv2.INTER_AREA)
 
@@ -241,9 +266,9 @@ if __name__ == '__main__':
     # Generate random population
     curr_population = np.empty(shape=(POPULATION_SIZE,), dtype=list)
     for i in range(POPULATION_SIZE):
-        curr_population[i] = [generate_random_rectangle(og_image=resized_image, max_height=MAX_REC_HEIGHT,
-                                                        max_width=MAX_REC_WIDTH, edge_thickness=EDGE_THICKNESS)
-                              for _ in range(RECTANGLE_AMOUNT)]
+        curr_population[i] = [generate_random_rectangle(og_image=resized_image, max_size=MAX_SIZE,
+                                                        edge_thickness=EDGE_THICKNESS,
+                                                        color_random=COLOR_ME_TENDERS) for _ in range(RECTANGLE_AMOUNT)]
 
     best_of_every_round = []
     for i in tqdm(range(ITERATION_LIMIT)):
@@ -255,11 +280,12 @@ if __name__ == '__main__':
         fitness_scores = calculate_fitness_scores(past_population, resized_image, weights_matrix)
         if i % 5 == 0:
             top_5 = top_indices(fitness_scores, 5/POPULATION_SIZE)
-            best_of_every_round.append(past_population[top_5[0]])
             print("top 5 avg fitness score is ", np.average(fitness_scores[top_5]))
 
+        if i % (np.ceil(ITERATION_LIMIT / 5000)) == 0:
+            best_of_every_round.append(past_population[top_indices(fitness_scores, 1 / POPULATION_SIZE)[0]])
 
-        indices = top_indices(fitness_scores, 0.25)
+        indices = top_indices(fitness_scores, 0.5)
         curr_population[:len(indices)] = past_population[indices]
 
         distribution = generate_distribution(fitness_scores)
@@ -278,7 +304,7 @@ if __name__ == '__main__':
     best_of_every_round.append(curr_population[top_indices(fitness_scores, 1 / POPULATION_SIZE)[0]])
     top_5 = top_indices(fitness_scores, 5/POPULATION_SIZE)
 
-    save_paintings_to_folder(directory+"/top5", curr_population[top_5], resized_image)
-    save_paintings_to_folder(directory+"/gif", best_of_every_round, resized_image)
+    save_paintings_to_folder(directory+"/top5", curr_population[top_5], True, resized_image)
+    save_paintings_to_folder(directory+"/gif", best_of_every_round, True, resized_image)
 
     create_gif(directory+"/gif", directory+"/GIF.gif")

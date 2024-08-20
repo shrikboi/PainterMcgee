@@ -6,11 +6,15 @@ from math import sqrt, log
 import os
 
 NUMBER_OF_RECTANGLES = 400
-MAX_REC_WIDTH = 30
-MAX_REC_HEIGHT = 30
+MAX_SIZE = 30
 EDGE_THICKNESS = 0
 PICTURE_SIZE = (128, 128)
-ORIGINAL_PICTURE_NAME = "FELV-cat.jpg"
+IMAGE_NAME = "FELV-cat.jpg"
+RECTANGLE_AMOUNT = 200
+ITERATION_LIMIT = 1000
+MULTIPLY_WEIGHTS = 1
+directory = f"./images_monte/{IMAGE_NAME}/{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MAX_SIZE}_{EDGE_THICKNESS}_" \
+            f"{MULTIPLY_WEIGHTS}"
 
 
 class Node:
@@ -31,8 +35,7 @@ class Node:
         actions = []
         for _ in range(5): # Limit the number of potential actions for simplicity
             rectangle = generate_random_rectangle(og_image=target_img,
-                                                  max_width=MAX_REC_WIDTH,
-                                                  max_height=MAX_REC_HEIGHT,
+                                                  max_size=MAX_SIZE,
                                                   edge_thickness=EDGE_THICKNESS)
             actions.append(rectangle)
         return actions
@@ -99,16 +102,15 @@ def mcts(root, target_img, max_depth=400, iterations=100):
 
 
 # Initialize
-target_img = cv2.imread('./layouts/' + ORIGINAL_PICTURE_NAME)
+target_img = cv2.imread('./layouts/' + IMAGE_NAME)
 target_img = cv2.resize(target_img, (128, 128))
 root_node = Node(np.ones_like(target_img)*255, target_img)
 
 
-best_approximation = mcts(root_node, target_img, max_depth=200, iterations=1000)
-directory = f"./images_monte/"
+best_approximation = mcts(root_node, target_img, max_depth=RECTANGLE_AMOUNT, iterations=ITERATION_LIMIT)
 if not os.path.exists(directory):
     os.makedirs(directory)
 cv2.imwrite(
-    os.path.join(directory, ORIGINAL_PICTURE_NAME),
+    os.path.join(directory, IMAGE_NAME),
     display_images_side_by_side(target_img, best_approximation))
 

@@ -6,8 +6,6 @@ import os
 
 PRESENTING_SIZE = (512, 512)
 PICTURE_SIZE = (128, 128)
-MAX_REC_WIDTH = 30
-MAX_REC_HEIGHT = 30
 
 
 class Rectangle(object):
@@ -23,6 +21,9 @@ class Rectangle(object):
         self.center = center
         self.color = color
         self.opacity = opacity
+
+    def __lt__(self, other):
+        return self.size[0]*self.size[1] < other.size[0]*other.size[1]
 
 
 def draw_rectangle(image, rectangle):
@@ -102,7 +103,6 @@ def display_image(image):
     return cv2.resize(image, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
 
 
-
 def draw_all_rectangles(rectangle_list, size):
     """
     Draw all possible rectangles one by one to help us see if the rectangles are good :)
@@ -162,15 +162,6 @@ def extract_features(image, multiply_weights):
         heatmap += 1 - heatmap.min()
     return heatmap
 
-    # Convert heatmap to color (for visualization)
-    heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap),
-                                      cv2.COLORMAP_JET)
-
-    # Display the heatmap
-    cv2.imshow('Heatmap', heatmap_color)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
-
 
 def extract_roi(rect, og_image):
     # Calculate the bounding box of the rotated rectangle in original coordinates
@@ -190,8 +181,7 @@ def extract_roi(rect, og_image):
     return og_image[y:y + h, x:x + w]
 
 
-def calculate_color(rectangle_size, rectangle_center, rectangle_angle,
-                    og_image):
+def calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image):
     rect = (rectangle_center, rectangle_size, rectangle_angle)
 
     bounding_box_roi = extract_roi(rect, og_image)
@@ -220,17 +210,20 @@ def calculate_color(rectangle_size, rectangle_center, rectangle_angle,
     return avg_color
 
 
-def generate_random_rectangle(og_image, max_width, max_height,
-                              edge_thickness=0):
-    width = random.randint(1, max_width)  # Random width between 1 and 100
-    height = random.randint(1,max_height)  # Random height between 1 and 100
+def generate_random_rectangle(og_image, max_size, edge_thickness=0, color_random=False):
+    width = random.randint(0, max_size)
+    height = random.randint(0, max_size)
     rectangle_size = (width, height)
     rectangle_angle = random.randint(0, 359)  # Random degree between 0 and 360
     center_width = random.randint(0, PICTURE_SIZE[0] - 1)
     center_height = random.randint(0, PICTURE_SIZE[1] - 1)
     rectangle_center = (center_width, center_height)
-    rectangle_color = calculate_color(rectangle_size, rectangle_center,
-                                      rectangle_angle, og_image)
+    if color_random:
+        rectangle_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        # rectangle_color = add_gaussian_noise(calculate_color(rectangle_size, rectangle_center, rectangle_angle,
+        #                                    og_image))
+    else:
+        rectangle_color = calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image)
     rectangle_opacity = (random.randint(1, 10)) / 10
 
     if edge_thickness: # Random edge_thickness between 0 and 1
@@ -242,7 +235,7 @@ def generate_random_rectangle(og_image, max_width, max_height,
     return rectangle
 
 
-def save_paintings_to_folder(directory, subjects, og_photo=None):
+def save_paintings_to_folder(directory, subjects, side_by_side, og_photo=None):
     paintings = []
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -250,7 +243,7 @@ def save_paintings_to_folder(directory, subjects, og_photo=None):
         paintings.append(np.ones((*PICTURE_SIZE[::-1], 3), dtype=np.uint8) * 255)
         for rectangle in subject:
             draw_rectangle(paintings[i], rectangle)
-        if og_photo:
+        if side_by_side:
             cv2.imwrite(
                 os.path.join(directory, f"image_{i}.png"),
                 display_images_side_by_side(og_photo, paintings[i]))
@@ -279,3 +272,23 @@ def create_gif(image_folder, output_path, duration=2):
 
     # Write images to a gif
     imageio.mimsave(output_path, images, duration=duration)
+
+
+def add_gaussian_noise(rgb_tuple, mean=0, stddev=5):
+    """
+    Adds Gaussian noise to each component of the RGB tuple.
+
+    :param rgb_tuple: A tuple of 3 floats representing an RGB color.
+    :param mean: Mean of the Gaussian noise.
+    :param stddev: Standard deviation of the Gaussian noise.
+    :return: A tuple of 3 floats with added Gaussian noise, clamped between 0 and 1.
+    """
+    noisy_rgb = []
+    for value in rgb_tuple:
+        noise = np.random.normal(mean, stddev)
+        noisy_value = value + noise
+        # Clamp the value between 0 and 1
+        noisy_value = min(max(noisy_value, 0), 255)
+        noisy_rgb.append(noisy_value)
+
+    return tuple(noisy_rgb)
