@@ -13,7 +13,7 @@ PICTURE_SIZE = (128, 128)
 IMAGE_NAME = "FELV-cat"
 RECTANGLE_AMOUNT = 500
 NUM_SIMULATIONS = 100
-NUM_SUCCESSORS = 20
+NUM_SUCCESSORS = 5
 MULTIPLY_WEIGHTS = 50
 COLOR_ME_TENDERS = True
 AMOUNT_OF_MOVES = 5000
@@ -102,12 +102,12 @@ class Node:
 
 
 def evaluate(image, target_img, weights_matrix):
-    image = cv2.cvtColor(image.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
-    target_img = cv2.cvtColor(target_img.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
-
-    delta_e = colour.difference.delta_e.delta_E_CIE2000(image, target_img)
-    return -np.mean(delta_e * weights_matrix)
-
+    # image = cv2.cvtColor(image.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+    # target_img = cv2.cvtColor(target_img.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+    #
+    # delta_e = colour.difference.delta_e.delta_E_CIE2000(image, target_img)
+    # return -np.mean(delta_e * weights_matrix)
+    return -np.sum((image.astype(np.float32) - target_img.astype(np.float32)) ** 2)
 
 def main(target_img, weights_matrix, possible_actions):
     curr_node = Node(np.ones_like(target_img)*255, target_img)

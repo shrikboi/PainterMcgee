@@ -5,7 +5,6 @@ import imageio
 import os
 
 PRESENTING_SIZE = (512, 512)
-# PRESENTING_SIZE = (300, 400)
 PICTURE_SIZE = (128, 128)
 
 
@@ -106,10 +105,6 @@ def display_images_side_by_side(target_img, model_img, bottom_text):
     return combined_image
 
 
-def display_image(image):
-    return cv2.resize(image, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
-
-
 def extract_features(image, multiply_weights):
     # Convert image to grayscale
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -188,7 +183,7 @@ def calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image)
     return avg_color
 
 
-def generate_random_init(number_of_rectangles, target_image, max_size, edge_thickness, color_random):
+def random_rectangle_set(number_of_rectangles, target_image, max_size, edge_thickness, color_random):
     return [generate_random_rectangle(target_image=target_image, max_size=max_size,
                                       edge_thickness=edge_thickness,
                                       color_random=color_random) for _ in range(number_of_rectangles)]
@@ -207,7 +202,7 @@ def generate_random_rectangle(target_image, max_size, edge_thickness=0, color_ra
 
     else:
         rectangle_color = calculate_color(rectangle_size, rectangle_center, rectangle_angle, target_image)
-        rectangle_color = add_gaussian_noise(rectangle_color)
+        # rectangle_color = add_gaussian_noise(rectangle_color)
 
     rectangle_opacity = (random.randint(1, 10)) / 10
 
@@ -220,22 +215,25 @@ def generate_random_rectangle(target_image, max_size, edge_thickness=0, color_ra
     return rectangle
 
 
-def save_paintings_to_folder(directory, images, target_image, bottom_text):
+def save_images_to_folder(directory, images, target_img, bottom_texts, titles=None):
+    """
+    Save the images to a folder.
+
+    :param directory: The directory where the images will be saved.
+    :param images: List of images.
+    :param target_img: The original photo to display alongside the painting if side_by_side is True.
+    :param bottom_texts: List of bottom texts
+    """
     if not os.path.exists(directory):
         os.makedirs(directory)
     for i, image in enumerate(images):
+        title = titles[i] if titles is not None else f"image_{i}"
         cv2.imwrite(
-            os.path.join(directory, f"image_{i}.png"),
-            display_images_side_by_side(target_image, image, bottom_text))
+            os.path.join(directory, title+".png"),
+            display_images_side_by_side(target_img, image, bottom_texts[i]))
 
 
-def save_image_to_folder(directory, image, name):
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-    cv2.imwrite(os.path.join(directory, name), image)
-
-
-def create_gif(image_folder, output_path, duration=2):
+def create_gif(image_folder, output_path, duration=0.5):
     def sort_key(filename):
         parts = filename.split('_')  # Split by underscore
         number_part = parts[-1].split('.')[0]  # Get the number part and remove file extension
