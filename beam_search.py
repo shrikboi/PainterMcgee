@@ -11,11 +11,12 @@ import abc
 import colour
 
 import skimage as ski
+from skimage.metrics import structural_similarity as ssim
 from utils import (draw_rectangle, PICTURE_SIZE, generate_random_rectangle, create_gif, display_images_side_by_side,
                    display_image, extract_features)
 
 RANDOM_TILES_PER_ROUND = 10
-NUM_OF_BRUSHSTROKES = 120
+NUM_OF_BRUSHSTROKES = 300
 BEAM_WIDTH = 5
 ITER_NUM = 1000
 RECTANGLE_LIST = './layouts/rectangle_list.txt'
@@ -24,6 +25,7 @@ MAX_SIZE = 20
 OUTPUT_FOLDER = './output_paintings'
 OUTPUT_GIF = './output_gif.gif'
 MULTIPLY_WEIGHTS = 50
+SSIM_WEIGHT = 0.5
 
 
 class Node:
@@ -74,6 +76,20 @@ def delta_e_loss(image, image2, weights_matrix):
     delta_e = delta_e * weights_matrix
     return np.mean(delta_e)
 
+def ssim_loss(image, tgt_image):
+    return -ssim(image, tgt_image, channel_axis=2, data_range=225)
+
+def combined_delta_loss(image, tgt_image, weights_matrix) -> float:
+    delta_e_val = delta_e_loss(image, tgt_image, weights_matrix)
+    ssim_val = ssim_loss(image, tgt_image)
+    return (1 - SSIM_WEIGHT) * delta_e_val + SSIM_WEIGHT * ssim_val
+
+def combined_mse_loss(image, tgt_image) -> float:
+    mse_val = mse_loss(image, tgt_image)
+    ssim_val = ssim_loss(image, tgt_image)
+    return (1 - SSIM_WEIGHT) * mse_val + SSIM_WEIGHT * ssim_val
+
+
 
 def random_init_canvas(tgt_image) -> Tuple:
     """
@@ -118,8 +134,13 @@ def beam_search(tgt_image, weight_matrix,  n_brushstrokes=NUM_OF_BRUSHSTROKES, b
     #  and after it works implement the SSIM loss
 
     init_canvas, init_stroke_set = random_init_canvas(tgt_image)
-    init_loss = mse_loss(init_canvas, tgt_image)
+
+    # init_loss = mse_loss(init_canvas, tgt_image)
     # init_loss = delta_e_loss(init_canvas, tgt_image, weights_matrix)
+    # init_loss = ssim_loss(init_canvas, target_image)
+    # init_loss = combined_delta_loss(init_canvas, tgt_image, weight_matrix)
+    init_loss = combined_mse_loss(init_canvas, tgt_image)
+
     beam = [Node(init_canvas, init_stroke_set, init_loss)]
 
     # cv2.imshow('Initial Canvas', init_canvas)
@@ -143,7 +164,12 @@ def beam_search(tgt_image, weight_matrix,  n_brushstrokes=NUM_OF_BRUSHSTROKES, b
                 new_canvas = apply_brushstrokes(new_canvas, new_stroke_set)
 
                 # new_loss = mse_loss(new_canvas, tgt_image)
-                new_loss = delta_e_loss(init_canvas, tgt_image, weights_matrix)
+                # new_loss = delta_e_loss(new_canvas, tgt_image, weights_matrix)
+                # new_loss = ssim_loss(new_canvas, target_image)  # combined
+                # new_loss = combined_delta_loss(new_canvas, tgt_image, weight_matrix)  # combined
+                new_loss = combined_mse_loss(new_canvas, tgt_image)
+
+
                 new_node = Node(new_canvas, new_stroke_set, new_loss, parent=node)
                 new_beam.append(new_node)
 
