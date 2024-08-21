@@ -5,6 +5,7 @@ import imageio
 import os
 
 PRESENTING_SIZE = (512, 512)
+# PRESENTING_SIZE = (300, 400)
 PICTURE_SIZE = (128, 128)
 
 
@@ -55,18 +56,18 @@ def draw_rectangle(image, rectangle):
     return image
 
 
-def display_images_side_by_side(image1, image2):
+def display_images_side_by_side(target_img, model_img, bottom_text):
     """
     Display two images side by side with text above each image.
 
-    :param image1: First (left) image.
-    :param image2: Second (right) image.
+    :param target_img: First (left) image.
+    :param model_img: Second (right) image.
     """
-    image1 = cv2.resize(image1, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
-    image2 = cv2.resize(image2, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
+    target_img = cv2.resize(target_img, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
+    model_img = cv2.resize(model_img, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
 
-    _, width1 = image1.shape[:2]
-    _, width2 = image2.shape[:2]
+    _, width1 = target_img.shape[:2]
+    _, width2 = model_img.shape[:2]
 
     # Define the text and font
     font = cv2.FONT_HERSHEY_DUPLEX
@@ -89,11 +90,17 @@ def display_images_side_by_side(image1, image2):
                 font_thickness, cv2.LINE_AA)
 
     # Concatenate text images with the actual images
-    image1_with_text = np.vstack((text_img1, image1))
-    image2_with_text = np.vstack((text_img2, image2))
+    image1_with_text = np.vstack((text_img1, target_img))
+    image2_with_text = np.vstack((text_img2, model_img))
 
     # Concatenate the images side by side
     combined_image = np.hstack((image1_with_text, image2_with_text))
+    if bottom_text is not None:
+        bottom_padding = np.zeros((50, combined_image.shape[:2][1], 3), dtype=np.uint8)
+        cv2.putText(bottom_padding, bottom_text, (10, 30), font, font_scale, text_color,
+                    font_thickness, cv2.LINE_AA)
+
+        return np.vstack((combined_image, bottom_padding))
 
     # Display the combined image
     return combined_image
@@ -101,35 +108,6 @@ def display_images_side_by_side(image1, image2):
 
 def display_image(image):
     return cv2.resize(image, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
-
-
-def draw_all_rectangles(rectangle_list, size):
-    """
-    Draw all possible rectangles one by one to help us see if the rectangles are good :)
-    """
-    for i, rectangle in enumerate(rectangle_list):
-        image = np.ones((*size, 3), dtype=np.uint8) * 255
-        image = draw_rectangle(image, (size[0] / 2, size[1] / 2), rectangle)
-        cv2.imshow(f'rectangle {i}', image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-
-
-def generate_rectangles(n, max_width, max_height, with_edges):
-    with open("./layouts/rectangle_list.txt", "w") as file:
-        for _ in range(n):
-            width = random.randint(1,
-                                   max_width)  # Random width between 1 and 100
-            height = random.randint(1,
-                                    max_height)  # Random height between 1 and 100
-            degree = random.randint(0, 360)  # Random degree between 0 and 360
-            if with_edges:
-                edge_thickness = random.randint(1,
-                                                4)  # Random edge_thickness between 1 and 10
-            else:
-                edge_thickness = 0  # Edge thickness is zero if edge is False
-
-            file.write(f"{width} {height} {degree} {edge_thickness}\n")
 
 
 def extract_features(image, multiply_weights):
@@ -163,7 +141,7 @@ def extract_features(image, multiply_weights):
     return heatmap
 
 
-def extract_roi(rect, og_image):
+def extract_roi(rect, target_image):
     # Calculate the bounding box of the rotated rectangle in original coordinates
     box = cv2.boxPoints(rect)
     box = np.int32(box)
@@ -174,11 +152,11 @@ def extract_roi(rect, og_image):
     # Ensure the bounding box is within the image boundaries
     x = max(x, 0)
     y = max(y, 0)
-    w = min(w, og_image.shape[1] - x)
-    h = min(h, og_image.shape[0] - y)
+    w = min(w, target_image.shape[1] - x)
+    h = min(h, target_image.shape[0] - y)
 
     # Extract the bounding box region from the original image
-    return og_image[y:y + h, x:x + w]
+    return target_image[y:y + h, x:x + w]
 
 
 def calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image):
@@ -210,7 +188,13 @@ def calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image)
     return avg_color
 
 
-def generate_random_rectangle(og_image, max_size, edge_thickness=0, color_random=False):
+def generate_random_init(number_of_rectangles, target_image, max_size, edge_thickness, color_random):
+    return [generate_random_rectangle(target_image=target_image, max_size=max_size,
+                                      edge_thickness=edge_thickness,
+                                      color_random=color_random) for _ in range(number_of_rectangles)]
+
+
+def generate_random_rectangle(target_image, max_size, edge_thickness=0, color_random=False):
     width = random.randint(0, max_size)
     height = random.randint(0, max_size)
     rectangle_size = (width, height)
@@ -220,10 +204,11 @@ def generate_random_rectangle(og_image, max_size, edge_thickness=0, color_random
     rectangle_center = (center_width, center_height)
     if color_random:
         rectangle_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-        # rectangle_color = add_gaussian_noise(calculate_color(rectangle_size, rectangle_center, rectangle_angle,
-        #                                    og_image))
+
     else:
-        rectangle_color = calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image)
+        rectangle_color = calculate_color(rectangle_size, rectangle_center, rectangle_angle, target_image)
+        rectangle_color = add_gaussian_noise(rectangle_color)
+
     rectangle_opacity = (random.randint(1, 10)) / 10
 
     if edge_thickness: # Random edge_thickness between 0 and 1
@@ -235,22 +220,19 @@ def generate_random_rectangle(og_image, max_size, edge_thickness=0, color_random
     return rectangle
 
 
-def save_paintings_to_folder(directory, subjects, side_by_side, og_photo=None):
-    paintings = []
+def save_paintings_to_folder(directory, images, target_image, bottom_text):
     if not os.path.exists(directory):
         os.makedirs(directory)
-    for i, subject in enumerate(subjects):
-        paintings.append(np.ones((*PICTURE_SIZE[::-1], 3), dtype=np.uint8) * 255)
-        for rectangle in subject:
-            draw_rectangle(paintings[i], rectangle)
-        if side_by_side:
-            cv2.imwrite(
-                os.path.join(directory, f"image_{i}.png"),
-                display_images_side_by_side(og_photo, paintings[i]))
-        else:
-            cv2.imwrite(
-                os.path.join(directory, f"image_{i}.png"),
-                display_image(paintings[i]))
+    for i, image in enumerate(images):
+        cv2.imwrite(
+            os.path.join(directory, f"image_{i}.png"),
+            display_images_side_by_side(target_image, image, bottom_text))
+
+
+def save_image_to_folder(directory, image, name):
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    cv2.imwrite(os.path.join(directory, name), image)
 
 
 def create_gif(image_folder, output_path, duration=2):
@@ -292,3 +274,12 @@ def add_gaussian_noise(rgb_tuple, mean=0, stddev=5):
         noisy_rgb.append(noisy_value)
 
     return tuple(noisy_rgb)
+
+
+
+# original_image_path = 'layouts/chair.jpg'
+# question_path = 'layouts/question.jpg'
+# original_image = cv2.imread(original_image_path)
+# model_image = cv2.imread(question_path)
+# final = display_images_side_by_side(target_img=original_image, model_img=model_image, iteration_num=None)
+# cv2.imwrite('./question.png', final)

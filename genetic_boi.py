@@ -1,38 +1,40 @@
-import os
 import random
-
-from colour import delta_E
-
-from utils import (draw_rectangle, display_images_side_by_side, extract_features, calculate_color,
-                   generate_random_rectangle, display_image, create_gif, save_paintings_to_folder)
+from utils import (draw_rectangle, extract_features, display_images_side_by_side,
+                   generate_random_rectangle, create_gif, save_paintings_to_folder, generate_random_init,
+                   save_image_to_folder)
 import numpy as np
 import cv2
 import time
-import heapq
 from tqdm import tqdm
 import torch
 import torchvision.models as models
 import torchvision.transforms as transforms
 import colour
+import matplotlib.pyplot as plt
+import matplotlib
 
+matplotlib.use('TkAgg')
 
 MAX_SIZE = 20
 EDGE_THICKNESS = 0
-MULTIPLY_WEIGHTS = 50
+MULTIPLY_WEIGHTS = 1
 POPULATION_SIZE = 20
 RECTANGLE_AMOUNT = 350
-ITERATION_LIMIT = 5000
+ITERATION_LIMIT = 10000
 PICTURE_SIZE = (128, 128)
 MUTANT_LOC = 5
 MUTANT_SCALE = 2
 K_TOURNAMENT = POPULATION_SIZE // 5
-# IMAGE_NAME = 'FELV-cat'
+ELITE_NUMBER = int(np.ceil(0.25 * POPULATION_SIZE))
+IMAGE_NAME = 'FELV-cat'
 # IMAGE_NAME = 'chair'
 # IMAGE_NAME = 'image'
 # IMAGE_NAME = 'shrook'
-IMAGE_NAME = 'duck'
-directory = f"./images_genetic/colors/{IMAGE_NAME}/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MUTANT_LOC}_" \
-                f"{MUTANT_SCALE}_{MAX_SIZE}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}"
+# IMAGE_NAME = 'duck'
+# IMAGE_NAME = 'snow'
+# IMAGE_NAME = 'doov'
+directory = f"./images_genetic/final/{IMAGE_NAME}/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_{MUTANT_LOC}_" \
+            f"{MUTANT_SCALE}_{MAX_SIZE}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}_{ELITE_NUMBER}"
 
 # if false we choose color, else color randomly chosen
 COLOR_ME_TENDERS = True
@@ -41,19 +43,29 @@ COLOR_ME_TENDERS = True
 vgg = models.vgg16(weights="VGG16_Weights.DEFAULT").features
 
 
-def delta_e_loss(subject, image2, weights_matrix):
-    l2_start_time = time.time()
-    image1 = np.ones((*PICTURE_SIZE[::-1], 3), dtype=np.uint8) * 255
-    for rectangle in subject:
-        draw_rectangle(image1, rectangle)
+class Node(object):
+    def __init__(self, rectangle_list, target_image, weights_matrix):
+        self.rectangle_list = rectangle_list
+        self.weights_matrix = weights_matrix
+        self.target_image = target_image
+        self.image = self.draw_rectangles()
+        self.loss = self.delta_e_loss()
 
-    image1 = cv2.cvtColor(image1.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
-    image2 = cv2.cvtColor(image2.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+    def draw_rectangles(self):
+        painting = np.ones((*PICTURE_SIZE[::-1], 3), dtype=np.uint8) * 255
+        for rectangle in self.rectangle_list:
+            draw_rectangle(painting, rectangle)
+        return painting
 
-    delta_e = colour.difference.delta_e.delta_E_CIE2000(image1, image2)
-    delta_e = delta_e*weights_matrix
-    # print("l2 time is ", time.time() - l2_start_time)
-    return np.mean(delta_e)
+    def delta_e_loss(self):
+        target_image = cv2.cvtColor(self.target_image.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+        image = cv2.cvtColor(self.image.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+
+        delta_e = colour.difference.delta_e.delta_E_CIE2000(target_image, image)
+        return np.mean(delta_e * self.weights_matrix)
+
+    def __lt__(self, other):
+        return self.loss < other.loss
 
 
 def no_extract_features(model, x):
@@ -116,7 +128,7 @@ def loss_function(subject, og_image, weights_matrix):
     l2_start_time = time.time()
     squared_diff = np.square(og_image - current_painting)
     weights_stacked = np.stack([weights_matrix, weights_matrix, weights_matrix], axis=-1)
-    squared_diff = squared_diff*weights_stacked
+    squared_diff = squared_diff * weights_stacked
     # Calculate the mean of the squared differences
     MSE = np.mean(squared_diff)
     RMSE = np.sqrt(MSE)
@@ -124,11 +136,9 @@ def loss_function(subject, og_image, weights_matrix):
     return RMSE
 
 
-def calculate_fitness_scores(population, og_image, weights_matrix):
-    fitness_scores = np.zeros(len(population))
-    for j, subject in enumerate(population):
-        fitness_scores[j] = delta_e_loss(subject, og_image, weights_matrix)
-    return -fitness_scores
+def calculate_fitness_scores(population):
+    fitness_scores = [-subject.loss for subject in population]
+    return fitness_scores
 
 
 def generate_distribution(fitness_scores):
@@ -138,45 +148,29 @@ def generate_distribution(fitness_scores):
     return probabilities
 
 
-def rectangle_scores(rectangles, og_image):
-    scores = np.zeros(rectangles.shape[0])
-
-    for j, rectangle in enumerate(rectangles):
-        avg_color = calculate_color(rectangle.size, rectangle.center, rectangle.angle, og_image)
-        scores[j] = np.mean((np.array(avg_color) - np.array(rectangle.color)) ** 2)
-
-    # Negate the loss scores
-    negated_scores = -scores
-    # Apply the softmax function
-    exp_scores = np.exp(negated_scores)
-    probabilities = exp_scores / np.sum(exp_scores)
-    return probabilities
-
-
 def mutation_1(child, og_image):
-    mutant_percentage = np.abs(np.random.normal(MUTANT_LOC, MUTANT_SCALE)) / 100
+    # mutant_percentage = np.abs(np.random.normal(MUTANT_LOC, MUTANT_SCALE)) / 100
     child = np.array(child, dtype=object)
-    genes_indices_to_be_mutated = np.random.choice(child.shape[0],
-                                                   size=int(np.ceil(RECTANGLE_AMOUNT * mutant_percentage)),
-                                                   replace=False)
+    genes_indices_to_be_mutated = np.random.choice(child.shape[0], size=1, replace=False)
     for i in genes_indices_to_be_mutated:
-        child[i] = generate_random_rectangle(og_image=og_image, max_size=MAX_SIZE,
+        child[i] = generate_random_rectangle(target_image=og_image, max_size=MAX_SIZE,
                                              edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS)
     child = list(child)
     return child
 
 
 def mutation_2(child, og_image):
-    child.append(generate_random_rectangle(og_image=og_image, max_size=MAX_SIZE,
-                                             edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS))
+    child.append(generate_random_rectangle(target_image=og_image, max_size=MAX_SIZE,
+                                           edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS))
     return child
 
 
-def reproduce(mom, dad, og_image):
-    mom = np.array(mom, dtype=object)
-    dad = np.array(dad, dtype=object)
+def reproduce(mom, dad, target_image):
+    mom_rectangles = np.array(mom.rectangle_list, dtype=object)
+    dad_rectangles = np.array(dad.rectangle_list, dtype=object)
 
-    n = max(mom.size, dad.size)
+    n = max(mom_rectangles.size, dad_rectangles.size)
+
     def pad_array(arr, n):
         padding_length = n - len(arr)
         if padding_length > 0:
@@ -184,26 +178,25 @@ def reproduce(mom, dad, og_image):
         return arr
 
     # Pad the arrays
-    mom_padded = pad_array(mom, n)
-    dad_padded = pad_array(dad, n)
+    mom_padded = pad_array(mom_rectangles, n)
+    dad_padded = pad_array(dad_rectangles, n)
 
-
-    child = []
+    child_rectangles = []
     horizontal_cut = random.randint(0, 2)
     if horizontal_cut:
         horizontal_line = random.randint(0, PICTURE_SIZE[1])
         for i in range(n):
             if mom_padded[i] is not None and mom_padded[i].center[1] >= horizontal_line:
-                child.append(mom_padded[i])
+                child_rectangles.append(mom_padded[i])
             if dad_padded[i] is not None and dad_padded[i].center[1] < horizontal_line:
-                child.append(dad_padded[i])
+                child_rectangles.append(dad_padded[i])
     else:
         vertical_line = random.randint(0, PICTURE_SIZE[0])
         for i in range(n):
             if mom_padded[i] is not None and mom_padded[i].center[0] >= vertical_line:
-                child.append(mom_padded[i])
+                child_rectangles.append(mom_padded[i])
             if dad_padded[i] is not None and dad_padded[i].center[0] < vertical_line:
-                child.append(dad_padded[i])
+                child_rectangles.append(dad_padded[i])
 
     # best_child = None
     # lowest_loss = np.inf
@@ -219,12 +212,11 @@ def reproduce(mom, dad, og_image):
 
     # Mutant me up scotty
     mutant_type = random.randint(1, 6)
-    if mutant_type == 1:
-        return mutation_1(child, og_image)
+    if mutant_type <= 1:
+        child_rectangles = mutation_1(child_rectangles, target_image)
     elif mutant_type <= 4:
-        return mutation_2(child, og_image)
-    else:
-        return child
+        child_rectangles = mutation_2(child_rectangles, target_image)
+    return Node(child_rectangles, target_image, mom.weights_matrix)
 
 
 def tournament(pop, resized_img):
@@ -238,7 +230,6 @@ def tournament(pop, resized_img):
             lowest_loss = curr_loss
 
     return best_subject
-
 
 
 def top_indices(arr, percent):
@@ -259,52 +250,61 @@ if __name__ == '__main__':
           f" max width {MAX_SIZE}")
     original_image_path = f'layouts/{IMAGE_NAME}.jpg'
     original_image = cv2.imread(original_image_path)
-    resized_image = cv2.resize(original_image, PICTURE_SIZE, interpolation=cv2.INTER_AREA)
+    target_img = cv2.resize(original_image, PICTURE_SIZE, interpolation=cv2.INTER_AREA)
 
-    weights_matrix = extract_features(resized_image, MULTIPLY_WEIGHTS)
+    weights_matrix = extract_features(target_img, MULTIPLY_WEIGHTS)
 
     # Generate random population
-    curr_population = np.empty(shape=(POPULATION_SIZE,), dtype=list)
+    curr_population = np.empty(shape=(POPULATION_SIZE,), dtype=object)
     for i in range(POPULATION_SIZE):
-        curr_population[i] = [generate_random_rectangle(og_image=resized_image, max_size=MAX_SIZE,
-                                                        edge_thickness=EDGE_THICKNESS,
-                                                        color_random=COLOR_ME_TENDERS) for _ in range(RECTANGLE_AMOUNT)]
+        rectangle_list = generate_random_init(number_of_rectangles=RECTANGLE_AMOUNT, target_image=target_img,
+                                              max_size=MAX_SIZE, edge_thickness=EDGE_THICKNESS,
+                                              color_random=COLOR_ME_TENDERS)
+        curr_population[i] = Node(rectangle_list, target_img, weights_matrix)
 
-    best_of_every_round = []
+    best_loss = []
     for i in tqdm(range(ITERATION_LIMIT)):
-        start_iter_time = time.time()
-
-        past_population = curr_population
-        curr_population = np.empty(shape=(POPULATION_SIZE,), dtype=list)
-
-        fitness_scores = calculate_fitness_scores(past_population, resized_image, weights_matrix)
-        if i % 5 == 0:
-            top_5 = top_indices(fitness_scores, 5/POPULATION_SIZE)
-            print("top 5 avg fitness score is ", np.average(fitness_scores[top_5]))
-
-        if i % (np.ceil(ITERATION_LIMIT / 5000)) == 0:
-            best_of_every_round.append(past_population[top_indices(fitness_scores, 1 / POPULATION_SIZE)[0]])
-
-        indices = top_indices(fitness_scores, 0.5)
-        curr_population[:len(indices)] = past_population[indices]
-
+        curr_population = np.sort(curr_population)
+        fitness_scores = calculate_fitness_scores(curr_population)
         distribution = generate_distribution(fitness_scores)
-        for j in range(len(indices), POPULATION_SIZE):
+
+        if i % 5 == 0:
+            save_image_to_folder(directory + "/gif",
+                                 display_images_side_by_side(target_img, curr_population[0].image, f"Generation: {i}"),
+                                 f"image_{i}.png")
+
+        best_loss.append(curr_population[0].loss)
+        past_population = curr_population
+        curr_population = np.empty(shape=(POPULATION_SIZE,), dtype=object)
+        curr_population[:ELITE_NUMBER] = past_population[:ELITE_NUMBER]  # Keep the elite population
+
+        for j in range(ELITE_NUMBER, POPULATION_SIZE):
             mom_and_dad = np.random.choice(len(distribution), size=2, p=distribution, replace=False)
             mom = past_population[mom_and_dad[0]]
             dad = past_population[mom_and_dad[1]]
             # mom = tournament(past_population, resized_image)
             # dad = tournament(past_population, resized_image)
 
-            curr_population[j] = reproduce(mom, dad, resized_image)
+            curr_population[j] = reproduce(mom, dad, target_img)
 
-        # print(f"Time taken: {time.time() - start_iter_time}")
+    curr_population = np.sort(curr_population)
+    best_loss.append(curr_population[0].loss)
+    # print(f"the number of rectangles in the final result is {len(curr_population[0].rectangle_list)}")
 
-    fitness_scores = calculate_fitness_scores(curr_population, resized_image, weights_matrix)
-    best_of_every_round.append(curr_population[top_indices(fitness_scores, 1 / POPULATION_SIZE)[0]])
-    top_5 = top_indices(fitness_scores, 5/POPULATION_SIZE)
+    save_paintings_to_folder(directory + "/top5", [curr_population[i].image for i in range(5)], target_img,
+                             f"Generation: {ITERATION_LIMIT}")
 
-    save_paintings_to_folder(directory+"/top5", curr_population[top_5], True, resized_image)
-    save_paintings_to_folder(directory+"/gif", best_of_every_round, True, resized_image)
+    save_image_to_folder(directory + "/gif",
+                         display_images_side_by_side(target_img, curr_population[0].image,
+                                                     f"Generation: {ITERATION_LIMIT}"),
+                         f"image_{ITERATION_LIMIT}.png")
 
-    create_gif(directory+"/gif", directory+"/GIF.gif")
+    create_gif(directory + "/gif", directory + "/GIF.gif")
+
+    plt.figure(figsize=(15, 7))  # Set the figure size
+    plt.plot(best_loss, linestyle='-', color='blue')
+    plt.title('Loss per Iteration')
+    plt.xlabel('Iteration')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.savefig(directory + "/loss.jpg")
