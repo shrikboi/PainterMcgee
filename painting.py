@@ -39,7 +39,7 @@ class Painting(object):
 
     def mse_loss(self):
         weights_stacked = np.stack([self.weights_matrix, self.weights_matrix, self.weights_matrix], axis=-1)
-        return np.mean(np.square(self.image - self.target_image) * weights_stacked)
+        return np.mean(np.square(self.image.astype(np.float32) - self.target_image.astype(np.float32)) * weights_stacked)
 
     def ssim_loss(self):
         return -ssim(self.image, self.target_image, channel_axis=2, data_range=225)
