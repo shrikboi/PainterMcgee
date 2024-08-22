@@ -21,7 +21,7 @@ class Painting(object):
             self.loss = self.ssim_loss()
         elif loss_type == "deltassim":
             self.loss = self.delta_e_loss()*(1-ssim_weight) + self.ssim_loss()*ssim_weight
-        elif loss_type == "mserssim":
+        elif loss_type == "msessim":
             self.loss = self.mse_loss()*(1-ssim_weight) + self.ssim_loss()*ssim_weight
 
     def draw_rectangles(self):
