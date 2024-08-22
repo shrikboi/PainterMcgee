@@ -2,7 +2,6 @@ import numpy as np
 from utils import draw_rectangle
 import cv2
 import colour
-import skimage as ski
 from skimage.metrics import structural_similarity as ssim
 
 PICTURE_SIZE = (128, 128)
@@ -39,8 +38,8 @@ class Painting(object):
         return np.mean(delta_e * self.weights_matrix)
 
     def mse_loss(self):
-        return np.mean((np.square(self.image.astype(np.float32) - self.target_image.astype(np.float32))) *
-                       self.weights_matrix)
+        weights_stacked = np.stack([self.weights_matrix, self.weights_matrix, self.weights_matrix], axis=-1)
+        return np.mean(np.square(self.image - self.target_image) * weights_stacked)
 
     def ssim_loss(self):
         return -ssim(self.image, self.target_image, channel_axis=2, data_range=225)
