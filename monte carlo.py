@@ -1,7 +1,8 @@
 import cv2
 import numpy as np
 import random
-from utils import generate_random_rectangle, draw_rectangle, display_images_side_by_side, extract_features
+from utils import generate_random_rectangle, draw_rectangle, display_images_side_by_side, extract_features, \
+    random_rectangle_set
 from math import sqrt, log
 import os
 import colour
@@ -17,12 +18,13 @@ NUM_SUCCESSORS = 5
 MULTIPLY_WEIGHTS = 50
 COLOR_ME_TENDERS = True
 AMOUNT_OF_MOVES = 5000
+LOSS_TYPE = 'delta'
 directory = f"./images_monte/{IMAGE_NAME}/{RECTANGLE_AMOUNT}_{NUM_SIMULATIONS}_{MAX_SIZE}_{EDGE_THICKNESS}_" \
-            f"{MULTIPLY_WEIGHTS}_{AMOUNT_OF_MOVES}_{NUM_SUCCESSORS}_{COLOR_ME_TENDERS}"
+            f"{MULTIPLY_WEIGHTS}_{AMOUNT_OF_MOVES}_{NUM_SUCCESSORS}_{COLOR_ME_TENDERS}_{LOSS_TYPE}"
 
 
 class Node:
-    def __init__(self, image, target_img, parent=None, rect=None, depth=0, expanded=False):
+    def __init__(self, image, target_img, weights_matrix, parent=None, rect=None, depth=0):
         self.image = image
         self.parent = parent
         self.children = []
@@ -31,21 +33,15 @@ class Node:
         self.visits = 0
         self.untried_actions = self.generate_possible_actions(target_img)
         self.depth = depth
-        self.expanded = expanded
+        self.weights_matrix = weights_matrix
 
     @staticmethod
     def generate_possible_actions(target_img):
         # Generate potential rectangle properties
-        actions = []
-        for _ in range(NUM_SUCCESSORS): # Limit the number of potential actions for simplicity
-            rectangle = generate_random_rectangle(target_image=target_img,
-                                                  max_size=MAX_SIZE,
-                                                  edge_thickness=EDGE_THICKNESS,
-                                                  color_random=COLOR_ME_TENDERS)
-            actions.append(rectangle)
+        actions = random_rectangle_set(NUM_SUCCESSORS, target_img, MAX_SIZE, EDGE_THICKNESS, COLOR_ME_TENDERS)
         return actions
 
-    def uct_select_child(self, c_param=0.1):
+    def uct_select_child(self, c_param=0.2):
         # Select child with highest UCT score
         uct_weights = [(child.wins / child.visits) +
                            c_param * np.sqrt((2 * np.log(self.visits) / child.visits)) for child in self.children]
@@ -53,7 +49,7 @@ class Node:
 
     def add_child(self, move, target_img):
         new_img = draw_rectangle(self.image.copy(), move)
-        child_node = Node(new_img, target_img, parent=self, rect=move, depth=self.depth + 1)
+        child_node = Node(new_img, target_img, self.weights_matrix, parent=self, rect=move, depth=self.depth + 1)
         self.untried_actions.remove(move)
         self.children.append(child_node)
         return child_node
@@ -83,11 +79,14 @@ class Node:
         if self.parent:
             self.parent.backpropagate(result)
 
-    def best_action(self, target_img, weights_matrix):
+    def best_action(self, target_img):
         for i in range(NUM_SIMULATIONS):
             v = self.tree_policy(target_img)
             rollout_img = v.rollout(target_img, steps=RECTANGLE_AMOUNT-self.depth)
-            reward = evaluate(rollout_img, target_img, weights_matrix)
+            if LOSS_TYPE == 'mse':
+                reward = self.mse_loss(target_img)
+            elif LOSS_TYPE == "delta":
+                reward = self.delta_e_loss(target_img)
             v.backpropagate(reward)
 
         return self.uct_select_child(c_param=0.)
@@ -101,18 +100,23 @@ class Node:
         return image
 
 
-def evaluate(image, target_img, weights_matrix):
-    # image = cv2.cvtColor(image.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
-    # target_img = cv2.cvtColor(target_img.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
-    #
-    # delta_e = colour.difference.delta_e.delta_E_CIE2000(image, target_img)
-    # return -np.mean(delta_e * weights_matrix)
-    return -np.sum((image.astype(np.float32) - target_img.astype(np.float32)) ** 2)
+def mse_loss(image, target_img, weights_matrix):
+    weights_stacked = np.stack([weights_matrix, weights_matrix, weights_matrix], axis=-1)
+    return -np.mean(
+        np.square(image.astype(np.float32) - target_img.astype(np.float32)) * weights_stacked)
 
-def main(target_img, weights_matrix, possible_actions):
-    curr_node = Node(np.ones_like(target_img)*255, target_img)
+def delta_e_loss(image, target_img, weights_matrix):
+    image = cv2.cvtColor(image.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+    target = cv2.cvtColor(target_img.astype(np.float32) / 255, cv2.COLOR_RGB2Lab)
+
+    delta_e = colour.difference.delta_e.delta_E_CIE2000(image, target)
+    return -np.mean(delta_e * weights_matrix)
+
+
+def main(target_img, weights_matrix):
+    curr_node = Node(np.ones_like(target_img)*255, target_img, weights_matrix)
     for _ in tqdm(range(RECTANGLE_AMOUNT)):
-        curr_node = curr_node.best_action(target_img, weights_matrix)
+        curr_node = curr_node.best_action(target_img)
     return curr_node
 
 
@@ -120,11 +124,7 @@ def main(target_img, weights_matrix, possible_actions):
 target_img = cv2.imread('./layouts/' + IMAGE_NAME+".jpg")
 target_img = cv2.resize(target_img, (128, 128))
 weights_matrix = extract_features(target_img, MULTIPLY_WEIGHTS)
-possible_actions = [generate_random_rectangle(target_image=target_img,
-                                              max_size=MAX_SIZE,
-                                              edge_thickness=EDGE_THICKNESS,
-                                              color_random=COLOR_ME_TENDERS) for _ in range(AMOUNT_OF_MOVES)]
-best_approximation = main(target_img, weights_matrix, possible_actions)
+best_approximation = main(target_img, weights_matrix)
 if not os.path.exists(directory):
     os.makedirs(directory)
 cv2.imwrite(
