@@ -1,7 +1,7 @@
 import random
 from utils import (draw_rectangle, extract_features,
-                   generate_random_rectangle, create_gif, save_images_to_folder, random_rectangle_set,
-                   PICTURE_SIZE)
+                   generate_random_rectangle, create_gif, save_images_to_folder,
+                   random_rectangle_set, PICTURE_SIZE)
 import numpy as np
 from painting import Painting
 import cv2
@@ -16,10 +16,11 @@ matplotlib.use('TkAgg')
 
 MAX_SIZE = 20
 EDGE_THICKNESS = 0
-MULTIPLY_WEIGHTS = 50
+MULTIPLY_WEIGHTS = 100
 POPULATION_SIZE = 20
 RECTANGLE_AMOUNT = 350
-ITERATION_LIMIT = 5000
+ITER_NUM = 5000
+FEATURE_EXTRACT = True
 K_TOURNAMENT = POPULATION_SIZE // 5
 ELITE_PERCENT = 0.25
 ELITE_NUMBER = int(np.ceil(ELITE_PERCENT * POPULATION_SIZE))
@@ -27,8 +28,9 @@ COLOR_ME_TENDERS = True # if false we choose color, else color randomly chosen
 LOSS_TYPE = 'mse'
 
 IMAGE_NAME = 'FELV-cat'
-directory = f"./images_genetic/{IMAGE_NAME}/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITERATION_LIMIT}_" \
-            f"{MAX_SIZE}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}_{ELITE_PERCENT}_{LOSS_TYPE}_{COLOR_ME_TENDERS}"
+directory = f"./images_genetic/{IMAGE_NAME}/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITER_NUM}_" \
+            f"{MAX_SIZE}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}_{ELITE_PERCENT}_{LOSS_TYPE}_{COLOR_ME_TENDERS}_"\
+            f"{FEATURE_EXTRACT}"
 
 
 # Load a pre-trained VGG16 model
@@ -169,7 +171,7 @@ def reproduce(mom, dad, target_image):
         child_rectangles = mutation_1(child_rectangles, target_image)
     elif mutant_type <= 4:
         child_rectangles = mutation_2(child_rectangles, target_image)
-    return Painting(child_rectangles, target_image, mom.weights_matrix, LOSS_TYPE)
+    return Painting(child_rectangles, target_image, mom.weights_matrix, LOSS_TYPE, FEATURE_EXTRACT)
 
 
 def tournament(pop, resized_img):
@@ -192,10 +194,10 @@ def genetic_algorithm(target_img):
         rectangle_list = random_rectangle_set(number_of_rectangles=RECTANGLE_AMOUNT, target_image=target_img,
                                               max_size=MAX_SIZE, edge_thickness=EDGE_THICKNESS,
                                               color_random=COLOR_ME_TENDERS)
-        curr_population[i] = Painting(rectangle_list, target_img, weights_matrix, LOSS_TYPE)
+        curr_population[i] = Painting(rectangle_list, target_img, weights_matrix, LOSS_TYPE, FEATURE_EXTRACT)
 
     losses = []
-    for i in tqdm(range(ITERATION_LIMIT)):
+    for i in tqdm(range(ITER_NUM)):
         curr_population = np.sort(curr_population) # sort by loss
         fitness_scores = calculate_fitness_scores(curr_population)
         distribution = generate_distribution(fitness_scores)
@@ -230,10 +232,10 @@ if __name__ == '__main__':
     losses.append(last_generation[0].loss)
 
     save_images_to_folder(directory + "/top5", [last_generation[i].image for i in range(5)], target_img,
-                          [f"Generation: {ITERATION_LIMIT}"]*5)
+                          [f"Generation: {ITER_NUM}"] * 5)
 
     save_images_to_folder(directory + "/gif", [last_generation[0].image], target_img,
-                          [f"Generation: {ITERATION_LIMIT}"], [f"image_{ITERATION_LIMIT}.png"])
+                          [f"Generation: {ITER_NUM}"], [f"image_{ITER_NUM}.png"])
 
     create_gif(directory + "/gif", directory + "/GIF.gif")
 
