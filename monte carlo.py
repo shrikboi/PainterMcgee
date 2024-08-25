@@ -27,12 +27,14 @@ class MCTS_Node(Painting):
         super().__init__(rectangle_list, target_img, weights_matrix, loss_type, feature_extract)
         self.parent = parent
         self.children = []
+        self.child_actions = []
         self.rect = rect
         self.wins = 0
         self.visits = 0
         self.untried_actions = self.generate_possible_actions(target_img)
         self.possible_actions = self.untried_actions.copy()
         self.depth = depth
+        self.expanded = False
 
     @staticmethod
     def generate_possible_actions(target_img):
@@ -44,6 +46,7 @@ class MCTS_Node(Painting):
                                                     edge_thickness=EDGE_THICKNESS,
                                                     color_random=COLOR_ME_TENDERS)
             while random_rect in actions:
+                print("heyo")
                 random_rect = generate_random_rectangle(target_image=target_img,
                                                         max_size=MAX_SIZE,
                                                         edge_thickness=EDGE_THICKNESS,
@@ -54,7 +57,8 @@ class MCTS_Node(Painting):
     def uct_select_child(self, c_param=0.2):
         # Select child with highest UCT score
         uct_weights = [(child.wins / child.visits) +
-                           c_param * np.sqrt((2 * np.log(self.visits) / child.visits)) for child in self.children]
+                       c_param * np.sqrt((2 * np.log(self.visits) / child.visits)) for child in
+                       self.children if child.expanded]
         return self.children[np.argmax(uct_weights)]
 
     def add_child(self, move):
@@ -63,6 +67,7 @@ class MCTS_Node(Painting):
         child_node = MCTS_Node(new_rect_list, self.target_image, self.weights_matrix, parent=self, rect=move,
                                depth=self.depth + 1)
         self.children.append(child_node)
+        self.child_actions.append(move)
         return child_node
 
     def update(self, result):

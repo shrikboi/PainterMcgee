@@ -25,6 +25,9 @@ class Rectangle(object):
     def __lt__(self, other):
         return self.size[0]*self.size[1] < other.size[0]*other.size[1]
 
+    def __eq__(self, other):
+        return all([self.size==other.size, self.angle==other.angle, self.edge_thickness==other.edge_thickness,
+                    self.center==other.center, self.color==other.color, self.opacity==other.opacity])
 
 def draw_rectangle(image, rectangle):
     """
