@@ -12,7 +12,8 @@ PICTURE_SIZE = (128, 128)
 
 class Rectangle(object):
     """
-    A Rectangle is a collection of size, angle, edge_thickness, center color and opacity.
+    A Rectangle represents a graphical element defined by its size, angle, edge thickness,
+    center position, color, and opacity.
     """
 
     def __init__(self, size, angle, edge_thickness, center, color, opacity):
@@ -31,10 +32,9 @@ class Rectangle(object):
 def draw_rectangle(image, rectangle):
     """
     Draw a rectangle on an image with the given parameters.
-
-    :param image: The image on which to draw the rectangle.
-    :param rectangle: The rectangle.
-    :return: Image with the rectangle drawn.
+    @param image: The image on which to draw the rectangle.
+    @param rectangle: The Rectangle object defining the rectangle's properties.
+    @return: The image with the rectangle drawn.
     """
     rect = (rectangle.center, rectangle.size, rectangle.angle)
 
@@ -56,12 +56,13 @@ def draw_rectangle(image, rectangle):
     return image
 
 
-def display_images_side_by_side(target_img, model_img, bottom_text):
+def display_images_side_by_side(target_img, model_img, bottom_text=None):
     """
-    Display two images side by side with text above each image.
-
-    :param target_img: First (left) image.
-    :param model_img: Second (right) image.
+    Display two images side by side with optional text above each image.
+    @param target_img: The first (left) image.
+    @param model_img: The second (right) image.
+    @param bottom_text: Optional text to display at the bottom.
+    @return: A single image combining the input images side by side with text.
     """
     target_img = cv2.resize(target_img, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
     model_img = cv2.resize(model_img, PRESENTING_SIZE, interpolation=cv2.INTER_AREA)
@@ -107,6 +108,12 @@ def display_images_side_by_side(target_img, model_img, bottom_text):
 
 
 def extract_features(image, multiply_weights):
+    """
+    Extract SIFT features from an image and create a heatmap representing feature density.
+    @param image: The input image.
+    @param multiply_weights: A multiplier applied to the heatmap for weighting features.
+    @return: A heatmap representing the distribution of SIFT features in the image.
+    """
     # Convert image to grayscale
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
@@ -115,11 +122,6 @@ def extract_features(image, multiply_weights):
 
     # Detect keypoints
     keypoints = sift.detect(gray_image, None)
-
-    # Draw keypoints
-    empty_image_with_keypoints = cv2.drawKeypoints(image.copy(), keypoints, None, color=(255, 0, 0))
-    # Display the image
-    cv2.imwrite("./siftfe.png", empty_image_with_keypoints)
 
     # Create an empty image with the same dimensions as original image
     heatmap = np.zeros_like(gray_image, dtype=np.float32)
@@ -139,13 +141,16 @@ def extract_features(image, multiply_weights):
     if heatmap.min() < 1:
         heatmap += 1 - heatmap.min()
 
-    heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap), cv2.COLORMAP_OCEAN)
-    # Display the heatmap
-    cv2.imwrite("./heatmap.png", heatmap_color)
     return heatmap
 
 
 def extract_roi(rect, target_image):
+    """
+    Extract the Region of Interest (ROI) defined by a rotated rectangle from the target image.
+    @param rect: A tuple representing the rectangle (center, size, angle).
+    @param target_image: The image from which to extract the ROI.
+    @return: The extracted ROI as an image.
+    """
     # Calculate the bounding box of the rotated rectangle in original coordinates
     box = cv2.boxPoints(rect)
     box = np.int32(box)
@@ -163,10 +168,18 @@ def extract_roi(rect, target_image):
     return target_image[y:y + h, x:x + w]
 
 
-def calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image):
+def calculate_color(rectangle_size, rectangle_center, rectangle_angle, target_img):
+    """
+    Calculate the average color of the region defined by a rectangle in the original image.
+    @param rectangle_size: The size (width, height) of the rectangle.
+    @param rectangle_center: The center (x, y) of the rectangle.
+    @param rectangle_angle: The rotation angle of the rectangle.
+    @param target_img: The original image.
+    @return: The average color of the region as a BGR tuple.
+    """
     rect = (rectangle_center, rectangle_size, rectangle_angle)
 
-    bounding_box_roi = extract_roi(rect, og_image)
+    bounding_box_roi = extract_roi(rect, target_img)
 
     # Calculate the center of the bounding box region
     bounding_box_center = (
@@ -192,13 +205,30 @@ def calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image)
     return avg_color
 
 
-def random_rectangle_set(number_of_rectangles, target_image, max_size, edge_thickness, color_random):
-    return [generate_random_rectangle(target_image=target_image, max_size=max_size,
+def random_rectangle_set(number_of_rectangles, target_img, max_size, edge_thickness, color_random):
+    """
+    Generate a set of random rectangles.
+    @param number_of_rectangles: The number of rectangles to generate.
+    @param target_img: The target image for color calculation if color_random is False.
+    @param max_size: The maximum size of the rectangles.
+    @param edge_thickness: The thickness of the rectangle's edges.
+    @param color_random: If True, colors are chosen randomly; otherwise, they are based on the target image.
+    @return: A list of randomly generated Rectangle objects.
+    """
+    return [generate_random_rectangle(target_img=target_img, max_size=max_size,
                                       edge_thickness=edge_thickness,
                                       color_random=color_random) for _ in range(number_of_rectangles)]
 
 
-def generate_random_rectangle(target_image, max_size, edge_thickness=0, color_random=False):
+def generate_random_rectangle(target_img, max_size, edge_thickness=0, color_random=False):
+    """
+    Generate a random rectangle with specified parameters.
+    @param target_img: The target image for color calculation if color_random is False.
+    @param max_size: The maximum size of the rectangle.
+    @param edge_thickness: The thickness of the rectangle's edges.
+    @param color_random: If True, colors are chosen randomly; otherwise, they are based on the target image.
+    @return: A Rectangle object with random properties.
+    """
     width = random.randint(0, max_size)
     height = random.randint(0, max_size)
     rectangle_size = (width, height)
@@ -210,8 +240,7 @@ def generate_random_rectangle(target_image, max_size, edge_thickness=0, color_ra
         rectangle_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
     else:
-        rectangle_color = calculate_color(rectangle_size, rectangle_center, rectangle_angle, target_image)
-        # rectangle_color = add_gaussian_noise(rectangle_color)
+        rectangle_color = calculate_color(rectangle_size, rectangle_center, rectangle_angle, target_img)
 
     rectangle_opacity = (random.randint(1, 10)) / 10
 
@@ -224,26 +253,33 @@ def generate_random_rectangle(target_image, max_size, edge_thickness=0, color_ra
     return rectangle
 
 
-def save_images_to_folder(directory, images, target_img, bottom_texts, titles=None):
+def save_images_to_folder(directory, images, target_img, bottom_texts=None, titles=None):
     """
-    Save the images to a folder.
-
-    :param directory: The directory where the images will be saved.
-    :param images: List of images.
-    :param target_img: The original photo to display alongside the painting if side_by_side is True.
-    :param bottom_texts: List of bottom texts
+    Save a list of images to a folder with optional titles and bottom texts.
+    @param directory: The directory where the images will be saved.
+    @param images: List of images to be saved.
+    @param target_img: The original image to display alongside the generated images.
+    @param bottom_texts: Optional list of texts to display below each image.
+    @param titles: Optional list of titles for each image.
+    @return:
     """
     if not os.path.exists(directory):
         os.makedirs(directory)
     for i, image in enumerate(images):
         title = titles[i] if titles is not None else f"image_{i}"
-        cv2.imwrite(
-            os.path.join(directory, title + ".png"),
-            display_images_side_by_side(target_img, image, bottom_texts[i]))
+        bottom_text = bottom_texts[i] if bottom_texts is not None else None
+        cv2.imwrite(os.path.join(directory, title + ".png"),
+                    display_images_side_by_side(target_img, image, bottom_text))
 
 
 def create_gif(image_folder, output_path, duration=0.2):
-
+    """
+    Create a GIF from a series of images in a folder.
+    @param image_folder: The folder containing the images.
+    @param output_path: The path where the GIF will be saved.
+    @param duration: The duration of each frame in the GIF.
+    @return:
+    """
     def sort_key(filename):
         parts = filename.split('_')  # Split by underscore
         number_part = parts[-1].split('.')[0]  # Get the number part and remove file extension
@@ -266,12 +302,11 @@ def create_gif(image_folder, output_path, duration=0.2):
 
 def add_gaussian_noise(rgb_tuple, mean=0, stddev=5):
     """
-    Adds Gaussian noise to each component of the RGB tuple.
-
-    :param rgb_tuple: A tuple of 3 floats representing an RGB color.
-    :param mean: Mean of the Gaussian noise.
-    :param stddev: Standard deviation of the Gaussian noise.
-    :return: A tuple of 3 floats with added Gaussian noise, clamped between 0 and 1.
+    Add Gaussian noise to an RGB color tuple.
+    @param rgb_tuple: A tuple representing an RGB color.
+    @param mean: The mean of the Gaussian noise.
+    @param stddev: The standard deviation of the Gaussian noise.
+    @return: A tuple representing the noisy RGB color.
     """
     noisy_rgb = []
     for value in rgb_tuple:
@@ -286,9 +321,10 @@ def add_gaussian_noise(rgb_tuple, mean=0, stddev=5):
 
 def log_losses(directory, losses):
     """
-    Log the losses to a text file.
-    :param directory: The directory where the log file will be saved
-    :param losses: A list of loss values
+    Log the loss values to a text file.
+    @param directory: The directory where the log file will be saved.
+    @param losses: A list of loss values.
+    @return:
     """
     log_file_path = os.path.join(directory, "loss_log.txt")
 
@@ -297,3 +333,4 @@ def log_losses(directory, losses):
             log_file.write(f"Iteration: {iteration}, Loss: {loss}\n")
 
     print(f"Loss log saved to {log_file_path}")
+

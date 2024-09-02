@@ -13,21 +13,22 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('TkAgg')
 
-
-POPULATION_SIZE = 20
-RECTANGLE_AMOUNT = 350
-MUTATION_CHANCE = 40
-ITER_NUM = 5000
-ELITE_PERCENT = 0.25
-LOSS_TYPE = LOSS.DELTA
-IMAGE_NAME = 'FELV-cat'
+# Constants defining the genetic algorithm's parameters
+POPULATION_SIZE = 20 # Number of individuals in the population
+RECTANGLE_AMOUNT = 350 # Number of starting rectangles
+MUTATION_CHANCE = 40 # Probability of mutation in percentage
+ITER_NUM = 5000 # Number of iterations (generations)
+ELITE_PERCENT = 0.25 # Percentage of elite individuals to retain each generation
+LOSS_TYPE = LOSS.DELTA # Type of loss function to use
+IMAGE_NAME = 'FELV-cat' # Name of the target image
 
 ELITE_NUMBER = int(np.ceil(ELITE_PERCENT * POPULATION_SIZE))
-MULTIPLY_WEIGHTS = 100
+MULTIPLY_WEIGHTS = 50
 COLOR_ME_TENDERS = True # if true color randomly chosen, else color is chosen by average color in target rectangle area
-EDGE_THICKNESS = 0
-MAX_SIZE = 20
+EDGE_THICKNESS = 0 # Thickness of the rectangle edges
+MAX_SIZE = 20 # Maximum size of rectangles
 
+# Directory to save generated images
 directory = f"./images_genetic/{IMAGE_NAME}/{POPULATION_SIZE}_{RECTANGLE_AMOUNT}_{ITER_NUM}_" \
             f"{MAX_SIZE}_{EDGE_THICKNESS}_{MULTIPLY_WEIGHTS}_{ELITE_PERCENT}_{LOSS_TYPE}_{COLOR_ME_TENDERS}"
 
@@ -38,10 +39,11 @@ vgg = models.vgg16(weights="VGG16_Weights.DEFAULT").features
 
 def calculate_perceptual_loss(curr_painting, target_img):
     """
-
-    @param curr_painting:
-    @param target_img:
-    @return:
+    Calculate the perceptual loss between the current painting and the target image.
+    The loss is computed based on features extracted from a pre-trained VGG16 model.
+    @param curr_painting: The current generated image.
+    @param target_img: The target image we want to approximate.
+    @return: The perceptual loss between the two images.
     """
     img1 = cv2.cvtColor(target_img, cv2.COLOR_BGR2RGB)
     img2 = cv2.cvtColor(curr_painting, cv2.COLOR_BGR2RGB)
@@ -79,32 +81,63 @@ def calculate_perceptual_loss(curr_painting, target_img):
 
 
 def calculate_fitness_scores(population):
+    """
+    Calculate the fitness scores for a population of paintings.
+    The fitness score is the negative of the loss, as we minimize loss.
+    @param population: List of Painting objects representing the current population.
+    @return: List of fitness scores.
+    """
     fitness_scores = [-subject.loss for subject in population]
     return fitness_scores
 
 
 def generate_distribution(fitness_scores):
+    """
+    Generate a probability distribution for selection based on fitness scores.
+    @param fitness_scores: List of fitness scores.
+    @return: Probability distribution for selection.
+    """
     scores = np.abs(fitness_scores)
     probabilities = scores / np.sum(scores)
     return probabilities
 
 
-def mutation_1(child, og_image):
+def mutation_1(child, target_img):
+    """
+    Perform a mutation on the child's rectangles by replacing one of them with a new random rectangle.
+    @param child: List of rectangles in the child painting.
+    @param target_img: The original target image.
+    @return: The mutated list of rectangles.
+    """
     child = np.array(child, dtype=object)
     i = np.random.choice(child.shape[0], size=1, replace=False)
-    child[i] = generate_random_rectangle(target_image=og_image, max_size=MAX_SIZE,
+    child[i] = generate_random_rectangle(target_img=target_img, max_size=MAX_SIZE,
                                          edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS)
     child = list(child)
     return child
 
 
-def mutation_2(child, og_image):
-    child.append(generate_random_rectangle(target_image=og_image, max_size=MAX_SIZE,
+def mutation_2(child, target_img):
+    """
+    Perform a mutation on the child's rectangles by adding a new random rectangle.
+    @param child: List of rectangles in the child painting.
+    @param target_img: The original target image.
+    @return: The mutated list of rectangles with an additional rectangle.
+    """
+    child.append(generate_random_rectangle(target_img=target_img, max_size=MAX_SIZE,
                                            edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS))
     return child
 
 
-def reproduce(mom, dad, target_image):
+def reproduce(mom, dad, target_img):
+    """
+    Create a new child by combining rectangles from two parent paintings.
+    The crossover is done either horizontally or vertically, followed by a possible mutation.
+    @param mom: The mother Painting object.
+    @param dad: The father Painting object.
+    @param target_img: The target image to be approximated.
+    @return: A new Painting object representing the child.
+    """
     mom_rectangles = np.array(mom.rectangle_list, dtype=object)
     dad_rectangles = np.array(dad.rectangle_list, dtype=object)
 
@@ -140,17 +173,22 @@ def reproduce(mom, dad, target_image):
     # Mutant me up scotty
     mutant_type = random.randint(1, 100)
     if mutant_type <= MUTATION_CHANCE/2:
-        child_rectangles = mutation_1(child_rectangles, target_image)
+        child_rectangles = mutation_1(child_rectangles, target_img)
     elif mutant_type <= MUTATION_CHANCE:
-        child_rectangles = mutation_2(child_rectangles, target_image)
-    return Painting(child_rectangles, target_image, mom.weights_matrix, LOSS_TYPE)
+        child_rectangles = mutation_2(child_rectangles, target_img)
+    return Painting(child_rectangles, target_img, mom.weights_matrix, LOSS_TYPE)
 
 
-def genetic_algorithm(target_img):
+def genetic_algorithm(target_img, weights_matrix):
+    """
+    Run the genetic algorithm to evolve a population of paintings towards resembling the target image.
+    @param target_img: The target image to be approximated.
+    @return: The final sorted population and the list of losses per generation.
+    """
     # Generate random population
     curr_population = np.empty(shape=(POPULATION_SIZE,), dtype=object)
     for i in range(POPULATION_SIZE):
-        rectangle_list = random_rectangle_set(number_of_rectangles=RECTANGLE_AMOUNT, target_image=target_img,
+        rectangle_list = random_rectangle_set(number_of_rectangles=RECTANGLE_AMOUNT, target_img=target_img,
                                               max_size=MAX_SIZE, edge_thickness=EDGE_THICKNESS,
                                               color_random=COLOR_ME_TENDERS)
         curr_population[i] = Painting(rectangle_list, target_img, weights_matrix, LOSS_TYPE)
@@ -162,7 +200,7 @@ def genetic_algorithm(target_img):
         distribution = generate_distribution(fitness_scores)
 
         if i % 5 == 0:
-            pass
+            # Save images every 5 generations for GIF
             save_images_to_folder(directory + "/gif", [curr_population[0].image], target_img, [f"Generation: {i}"],
                                   [f"image_{i}"])
 
@@ -187,11 +225,11 @@ if __name__ == '__main__':
 
     weights_matrix = extract_features(target_img, MULTIPLY_WEIGHTS)
 
-    last_generation, losses = genetic_algorithm(target_img)
+    last_generation, losses = genetic_algorithm(target_img, weights_matrix)
     losses.append(last_generation[0].loss)
 
     save_images_to_folder(directory+"/top5", [last_generation[i].image for i in range(5)], target_img,
-                          [f"Generation: {ITER_NUM}"] * 5)
+                          bottom_texts=[f"Generation: {ITER_NUM}"] * 5)
 
     save_images_to_folder(directory + "/gif", [last_generation[0].image], target_img,
                           [f"Generation: {ITER_NUM}"], [f"image_{ITER_NUM}.png"])
