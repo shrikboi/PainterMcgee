@@ -1,22 +1,38 @@
 # PainterMcgee
-This repository contains the codebase for our AI final project, in which we use models to approximate images using rectangles.
+PainterMcgee is a repository developed for our AI final project, where we explore various AI-driven approaches to approximate target images using rectangles. 
+This project employs three distinct algorithms to tackle the problem, each with its unique methodology and strengths.
 
-We approached the problem using three different models:
+# Overview of Approaches
+We implemented the following three models to approximate images:
 
-Genetic algorithm - which can be run by running genetic_boi 
+**Genetic Algorithm:** <br />
+-Mimics the process of natural selection to iteratively improve the image approximation. <br />
+-To run this model, execute the script: genetic_boi.py.
 
-Local beam search - which can be run by running beam_search
+**Local Beam Search:** <br />
+-Explores multiple paths in parallel, focusing on the most promising candidates. <br />
+-To run this model, execute the script: beam_search.py. 
 
-MCTS - which can be run by running monte_carlo
+**MCTS:** <br />
+-Uses simulations to explore possible moves and select the best strategy based on accumulated results. <br />
+-To run this model, execute the script: monte_carlo.py.
 
-At the top of each file one can change the different hyper-parameters that specific model uses
+# How to Use
+Each script allows customization through various hyperparameters defined at the top of the file. <br />
+You can adjust these parameters to experiment with different configurations and observe how they affect the image approximation process.
 
-The target image the model will try to approximate is determined by this parameter at the top of each file:
-IMAGE_NAME = 'image_name' 
+# Setting the Target Image
+The target image that each model will attempt to approximate is specified by the following parameter at the top of each file: <br />
+IMAGE_NAME = 'image_name' <br />
+The image file should be placed in the layouts directory, with the path formatted as layouts/{IMAGE_NAME}.jpg.
 
-The image is then taken as 'layouts/{IMAGE_NAME}.jpg' 
+# Using Your Own Images
+If you'd like to use a different target image: <br />
+Upload your image to the layouts directory as a .jpg file. <br />
+Update the IMAGE_NAME parameter in the script to match your file name (without the .jpg extension). <br />
 
-Notice we already uploaded some images we experimented with to layouts, if one wants to use different images,
-upload to layouts as a jpg and change IMAGE_NAME. 
+We have included some pre-loaded images in the layouts directory that you can use to test the models. <br />
+Feel free to experiment with these or upload your own images following the instructions above.
+
 
 
