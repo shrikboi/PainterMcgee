@@ -2,7 +2,7 @@ import cv2
 from tqdm import tqdm
 from typing import List
 import random
-from painting import Painting
+from painting import BeamSearch_Node, LOSS
 from utils import (PICTURE_SIZE, create_gif,
                    save_images_to_folder, extract_features, random_rectangle_set)
 import matplotlib.pyplot as plt
@@ -10,44 +10,28 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 
-RECTANGLE_AMOUNT = 300
-RANDOM_TILES_PER_ROUND = 20
-BEAM_WIDTH = 10
+RECTANGLE_AMOUNT = 350
+RANDOM_TILES_PER_ROUND = 10
+BEAM_WIDTH = 5
 ITER_NUM = 1000
+LOSS_TYPE = LOSS.MSE
+
+MULTIPLY_WEIGHTS = 100
+COLOR_ME_TENDERS = True # if true color randomly chosen, else color is chosen by average color in target rectangle area
+EDGE_THICKNESS = 0
 MAX_SIZE = 20
-MULTIPLY_WEIGHTS = 50
-COLOR_ME_TENDERS = True
-SSIM_WEIGHT = 0.5
-FEATURE_EXTRACT = True
-LOSS_TYPE = 'deltassim'
 
 IMAGE_NAME = 'FELV-cat'
 directory = f'./beam_search/{IMAGE_NAME}/{RECTANGLE_AMOUNT}_{RANDOM_TILES_PER_ROUND}_{BEAM_WIDTH}_{ITER_NUM}_' \
-            f'{MAX_SIZE}_{MULTIPLY_WEIGHTS}_{SSIM_WEIGHT}_{COLOR_ME_TENDERS}_{LOSS_TYPE}'
+            f'{MAX_SIZE}_{MULTIPLY_WEIGHTS}_{COLOR_ME_TENDERS}_{LOSS_TYPE}'
 
 
-class BeamSearch_Node(Painting):
-    def __init__(self, rectangle_list, target_img, weights_matrix, loss_type=LOSS_TYPE,
-                 feature_extract=FEATURE_EXTRACT, ssim_weight=SSIM_WEIGHT,
-                 parent=None):
-        super().__init__(rectangle_list, target_img, weights_matrix, loss_type, feature_extract, ssim_weight)
-        self.parent = parent
-
-    def get_path(self) -> List:
-        path = []
-        node = self
-        while node is not None:
-            path.append(node)
-            node = node.parent
-        return path[::-1]  # return reversed path
-
-
-def random_init_canvas(target_img) -> BeamSearch_Node:
+def random_init_canvas(target_img):
     """
     creates a canvas that was randomly initialized
     """
     rectangle_list = random_rectangle_set(number_of_rectangles=RECTANGLE_AMOUNT, target_image=target_img,
-                                          max_size=MAX_SIZE, edge_thickness=0, color_random=COLOR_ME_TENDERS)
+                                          max_size=MAX_SIZE, edge_thickness=EDGE_THICKNESS, color_random=COLOR_ME_TENDERS)
     weights_matrix = extract_features(target_img, MULTIPLY_WEIGHTS)
     return BeamSearch_Node(rectangle_list, target_img, weights_matrix)
 
@@ -57,9 +41,6 @@ def beam_search(target_img, n_brushstrokes=RECTANGLE_AMOUNT, beam_width=BEAM_WID
     """
     performs a bram search and returns a list of blocks that represent the painting
     """
-    #  add color options(delta e from genetic boi),
-    #  and after it works implement the SSIM loss
-
     init_node = random_init_canvas(target_img)
     beam = [init_node]
 
@@ -97,7 +78,7 @@ if __name__ == '__main__':
     create_gif(directory+"/best_image_path", directory + "/GIF.gif")
 
     losses = [node.loss for node in path]
-    plt.figure(figsize=(15, 7))  # Set the figure size
+    plt.figure(figsize=(8, 7))  # Set the figure size
     plt.plot(losses, linestyle='-', color='blue')
     plt.title('Loss per Iteration')
     plt.xlabel('Iteration')

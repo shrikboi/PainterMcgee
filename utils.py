@@ -3,15 +3,16 @@ import numpy as np
 import random
 import imageio
 import os
+import matplotlib
 
+matplotlib.use('TkAgg')
 PRESENTING_SIZE = (512, 512)
 PICTURE_SIZE = (128, 128)
 
 
 class Rectangle(object):
     """
-    A Rectangle is a collection of
-
+    A Rectangle is a collection of size, angle, edge_thickness, center color and opacity.
     """
 
     def __init__(self, size, angle, edge_thickness, center, color, opacity):
@@ -22,12 +23,10 @@ class Rectangle(object):
         self.color = color
         self.opacity = opacity
 
-    def __lt__(self, other):
-        return self.size[0]*self.size[1] < other.size[0]*other.size[1]
-
     def __eq__(self, other):
-        return all([self.size==other.size, self.angle==other.angle, self.edge_thickness==other.edge_thickness,
-                    self.center==other.center, self.color==other.color, self.opacity==other.opacity])
+        return all([self.size == other.size, self.angle == other.angle, self.edge_thickness == other.edge_thickness,
+                    self.center == other.center, self.color == other.color, self.opacity == other.opacity])
+
 
 def draw_rectangle(image, rectangle):
     """
@@ -35,7 +34,6 @@ def draw_rectangle(image, rectangle):
 
     :param image: The image on which to draw the rectangle.
     :param rectangle: The rectangle.
-    :param color: The color of the rectangle (default is black).
     :return: Image with the rectangle drawn.
     """
     rect = (rectangle.center, rectangle.size, rectangle.angle)
@@ -118,6 +116,11 @@ def extract_features(image, multiply_weights):
     # Detect keypoints
     keypoints = sift.detect(gray_image, None)
 
+    # Draw keypoints
+    empty_image_with_keypoints = cv2.drawKeypoints(image.copy(), keypoints, None, color=(255, 0, 0))
+    # Display the image
+    cv2.imwrite("./siftfe.png", empty_image_with_keypoints)
+
     # Create an empty image with the same dimensions as original image
     heatmap = np.zeros_like(gray_image, dtype=np.float32)
 
@@ -129,13 +132,16 @@ def extract_features(image, multiply_weights):
     # Blur the heatmap to spread out the "heat"
     heatmap = cv2.GaussianBlur(heatmap, (0, 0), sigmaX=4, sigmaY=4)
 
-    # Normalize the heatmap to sum to 1
-    # heatmap /= np.sum(heatmap)
+    # Normalize the heatmap
     if heatmap.min() < 0:
         heatmap += heatmap.min()
     heatmap = heatmap * multiply_weights
     if heatmap.min() < 1:
         heatmap += 1 - heatmap.min()
+
+    heatmap_color = cv2.applyColorMap(np.uint8(255 * heatmap), cv2.COLORMAP_OCEAN)
+    # Display the heatmap
+    cv2.imwrite("./heatmap.png", heatmap_color)
     return heatmap
 
 
@@ -164,14 +170,14 @@ def calculate_color(rectangle_size, rectangle_center, rectangle_angle, og_image)
 
     # Calculate the center of the bounding box region
     bounding_box_center = (
-    bounding_box_roi.shape[1] // 2, bounding_box_roi.shape[0] // 2)
+        bounding_box_roi.shape[1] // 2, bounding_box_roi.shape[0] // 2)
 
     # Get the rotation matrix for the bounding box region
     M = cv2.getRotationMatrix2D(bounding_box_center, rectangle_angle, 1.0)
 
     # Rotate the bounding box region
     rotated_roi = cv2.warpAffine(bounding_box_roi, M, (
-    bounding_box_roi.shape[1], bounding_box_roi.shape[0]))
+        bounding_box_roi.shape[1], bounding_box_roi.shape[0]))
 
     # Calculate the new center of the rotated ROI
     new_center = (rotated_roi.shape[1] // 2, rotated_roi.shape[0] // 2)
@@ -209,7 +215,7 @@ def generate_random_rectangle(target_image, max_size, edge_thickness=0, color_ra
 
     rectangle_opacity = (random.randint(1, 10)) / 10
 
-    if edge_thickness: # Random edge_thickness between 0 and 1
+    if edge_thickness:  # Random edge_thickness between 0 and 1
         edge_thickness = random.randint(0, edge_thickness)
 
     rectangle = Rectangle(rectangle_size, rectangle_angle, edge_thickness,
@@ -232,11 +238,12 @@ def save_images_to_folder(directory, images, target_img, bottom_texts, titles=No
     for i, image in enumerate(images):
         title = titles[i] if titles is not None else f"image_{i}"
         cv2.imwrite(
-            os.path.join(directory, title+".png"),
+            os.path.join(directory, title + ".png"),
             display_images_side_by_side(target_img, image, bottom_texts[i]))
 
 
-def create_gif(image_folder, output_path, duration=0.5):
+def create_gif(image_folder, output_path, duration=0.2):
+
     def sort_key(filename):
         parts = filename.split('_')  # Split by underscore
         number_part = parts[-1].split('.')[0]  # Get the number part and remove file extension
@@ -277,10 +284,16 @@ def add_gaussian_noise(rgb_tuple, mean=0, stddev=5):
     return tuple(noisy_rgb)
 
 
+def log_losses(directory, losses):
+    """
+    Log the losses to a text file.
+    :param directory: The directory where the log file will be saved
+    :param losses: A list of loss values
+    """
+    log_file_path = os.path.join(directory, "loss_log.txt")
 
-# original_image_path = 'layouts/chair.jpg'
-# question_path = 'layouts/question.jpg'
-# original_image = cv2.imread(original_image_path)
-# model_image = cv2.imread(question_path)
-# final = display_images_side_by_side(target_img=original_image, model_img=model_image, iteration_num=None)
-# cv2.imwrite('./question.png', final)
+    with open(log_file_path, "w") as log_file:
+        for iteration, loss in enumerate(losses):
+            log_file.write(f"Iteration: {iteration}, Loss: {loss}\n")
+
+    print(f"Loss log saved to {log_file_path}")

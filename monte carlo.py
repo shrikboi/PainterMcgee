@@ -4,28 +4,27 @@ import random
 from utils import generate_random_rectangle, display_images_side_by_side, extract_features
 import os
 from tqdm import tqdm
-from painting import Painting
+from painting import BeamSearch_Node, LOSS
 
-MAX_SIZE = 20
-EDGE_THICKNESS = 0
-PICTURE_SIZE = (128, 128)
+RECTANGLE_AMOUNT = 350
+NUM_SIMULATIONS = 100
+NUM_SUCCESSORS = 10
+LOSS_TYPE = LOSS.MSE
 IMAGE_NAME = "FELV-cat"
-RECTANGLE_AMOUNT = 500
-NUM_SIMULATIONS = 1
-NUM_SUCCESSORS = 5
-MULTIPLY_WEIGHTS = 50
-COLOR_ME_TENDERS = True
-FEATURE_EXTRACT = True
-LOSS_TYPE = 'delta'
+
+MULTIPLY_WEIGHTS = 100
+COLOR_ME_TENDERS = True # if true color randomly chosen, else color is chosen by average color in target rectangle area
+EDGE_THICKNESS = 0
+MAX_SIZE = 20
+
 directory = f"./images_monte/{IMAGE_NAME}/{RECTANGLE_AMOUNT}_{NUM_SIMULATIONS}_{MAX_SIZE}_{EDGE_THICKNESS}_" \
             f"{MULTIPLY_WEIGHTS}_{NUM_SUCCESSORS}_{COLOR_ME_TENDERS}_{LOSS_TYPE}"
 
 
-class MCTS_Node(Painting):
+class MCTS_Node(BeamSearch_Node):
     def __init__(self, rectangle_list, target_img, weights_matrix, loss_type=LOSS_TYPE,
-                 feature_extract=FEATURE_EXTRACT, parent=None, rect=None, depth=0):
-        super().__init__(rectangle_list, target_img, weights_matrix, loss_type, feature_extract)
-        self.parent = parent
+                 parent=None, rect=None, depth=0):
+        super().__init__(rectangle_list, target_img, weights_matrix, loss_type, parent=parent)
         self.children = []
         self.child_actions = []
         self.rect = rect
@@ -34,7 +33,6 @@ class MCTS_Node(Painting):
         self.untried_actions = self.generate_possible_actions(target_img)
         self.possible_actions = self.untried_actions.copy()
         self.depth = depth
-        self.expanded = False
 
     @staticmethod
     def generate_possible_actions(target_img):
@@ -46,7 +44,6 @@ class MCTS_Node(Painting):
                                                     edge_thickness=EDGE_THICKNESS,
                                                     color_random=COLOR_ME_TENDERS)
             while random_rect in actions:
-                print("heyo")
                 random_rect = generate_random_rectangle(target_image=target_img,
                                                         max_size=MAX_SIZE,
                                                         edge_thickness=EDGE_THICKNESS,
@@ -58,7 +55,7 @@ class MCTS_Node(Painting):
         # Select child with highest UCT score
         uct_weights = [(child.wins / child.visits) +
                        c_param * np.sqrt((2 * np.log(self.visits) / child.visits)) for child in
-                       self.children if child.expanded]
+                       self.children]
         return self.children[np.argmax(uct_weights)]
 
     def add_child(self, move):
@@ -79,13 +76,8 @@ class MCTS_Node(Painting):
 
     def expand(self):
         action = random.choice(self.untried_actions)
-        child_actions = [child.rect for child in self.children]
-        if action in child_actions:
-            child = self.children[child_actions.index(action)]
-        else:
-            child = self.add_child(action)
+        child = self.add_child(action)
         self.untried_actions.remove(action)
-        child.expanded = True
         return child
 
     def randomly_choose_child(self):
@@ -119,27 +111,30 @@ class MCTS_Node(Painting):
         return self.uct_select_child(c_param=0.)
 
     def rollout(self, steps):
-        curr_state = self
+        rectangle_list = self.rectangle_list.copy()
         for _ in range(steps):
-            curr_state = curr_state.randomly_choose_child()
-        return curr_state
+            rect = generate_random_rectangle(self.target_image, MAX_SIZE)
+            rectangle_list.append(rect)
+        return MCTS_Node(rectangle_list, self.target_image, self.weights_matrix)
 
 
-def main(target_img, weights_matrix):
+def monte_carlo_tree_search(target_img, weights_matrix):
     curr_node = MCTS_Node([], target_img, weights_matrix)
     for _ in tqdm(range(RECTANGLE_AMOUNT)):
         curr_node = curr_node.best_action()
     return curr_node
 
 
-# Initialize
-target_img = cv2.imread('./layouts/' + IMAGE_NAME+".jpg")
-target_img = cv2.resize(target_img, (128, 128))
-weights_matrix = extract_features(target_img, MULTIPLY_WEIGHTS)
-best_approximation = main(target_img, weights_matrix)
-if not os.path.exists(directory):
-    os.makedirs(directory)
-cv2.imwrite(
-    os.path.join(directory, IMAGE_NAME+".jpg"),
-    display_images_side_by_side(target_img, best_approximation.image, None))
+if __name__ == '__main__':
+    target_img = cv2.imread('./layouts/' + IMAGE_NAME+".jpg")
+    target_img = cv2.resize(target_img, (128, 128))
+    weights_matrix = extract_features(target_img, MULTIPLY_WEIGHTS)
+    best_approximation = monte_carlo_tree_search(target_img, weights_matrix)
+    path = best_approximation.get_path()
+    losses = [node.loss for node in path]
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+    cv2.imwrite(
+        os.path.join(directory, IMAGE_NAME+".jpg"),
+        display_images_side_by_side(target_img, best_approximation.image, None))
 

@@ -3,27 +3,34 @@ from utils import draw_rectangle
 import cv2
 import colour
 from skimage.metrics import structural_similarity as ssim
-
+from enum import Enum
 PICTURE_SIZE = (128, 128)
 
 
+class LOSS(Enum):
+    DELTA = 1
+    MSE = 2
+    SSIM = 3
+    DELTASSIM = 4
+    MSESSIM = 5
+
 class Painting(object):
-    def __init__(self, rectangle_list, target_img, weights_matrix, loss_type, feature_extract,
+    def __init__(self, rectangle_list, target_img, weights_matrix, loss_type,
                  ssim_weight=0.5):
         self.rectangle_list = rectangle_list
         self.weights_matrix = weights_matrix
         self.target_image = target_img
         self.image = self.draw_rectangles()
-        self.feature_extract = feature_extract
-        if loss_type == "delta":
+        self.feature_extract = True if loss_type in [LOSS.DELTA, LOSS.MSE] else False
+        if loss_type == LOSS.DELTA:
             self.loss = self.delta_e_loss()
-        elif loss_type == "mse":
+        elif loss_type == LOSS.MSE:
             self.loss = self.mse_loss()
-        elif loss_type == "ssim":
+        elif loss_type == LOSS.SSIM:
             self.loss = self.ssim_loss()
-        elif loss_type == "deltassim":
+        elif loss_type == LOSS.DELTASSIM:
             self.loss = self.delta_e_loss()*(1-ssim_weight) + self.ssim_loss()*ssim_weight
-        elif loss_type == "msessim":
+        elif loss_type == LOSS.MSESSIM:
             self.loss = self.mse_loss()*(1-ssim_weight) + self.ssim_loss()*ssim_weight
 
     def draw_rectangles(self):
@@ -59,3 +66,17 @@ class Painting(object):
 
     def __lt__(self, other):
         return self.loss < other.loss
+
+
+class BeamSearch_Node(Painting):
+    def __init__(self, rectangle_list, target_img, weights_matrix, loss_type=LOSS_TYPE, parent=None):
+        super().__init__(rectangle_list, target_img, weights_matrix, loss_type)
+        self.parent = parent
+
+    def get_path(self):
+        path = []
+        node = self
+        while node is not None:
+            path.append(node)
+            node = node.parent
+        return path[::-1]  # return reversed path
